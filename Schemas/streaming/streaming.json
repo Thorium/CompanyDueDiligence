@@ -1,0 +1,94 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "version": "1.0.0",
+        "title": "Streaming API",
+        "description": "A streaming API giving access to real time data changes."
+    },
+    "host": "stream.companieshouse.gov.uk",
+    "schemes": [
+        "https"
+    ],
+    "consumes": [
+        "application/json"
+    ],
+    "produces": [
+        "application/json"
+    ],
+    "tags": [{
+            "name": "companies",
+            "description": "Company information"
+        },
+        {
+            "name": "filings",
+            "description": "Filing history"
+        },
+        {
+            "name": "insolvency-cases",
+            "description": "Insolvency cases"
+        },
+        {
+            "name": "charges",
+            "description": "Charges"
+        },
+        {
+            "name": "officers",
+            "description": "Officers"
+        },
+        {
+            "name" : "persons-with-significant-control",
+            "description" : "Persons with significant control"
+        },
+        {
+            "name" : "disqualified-officers",
+            "description" : "Disqualified officers"
+        },
+        {
+            "name" : "company-exemptions",
+            "description" : "Company exemptions"
+        },
+        {
+            "name" : "persons-with-significant-control-statements",
+            "description" : "Persons with significant control statements"
+        }
+    ],
+    "securityDefinitions": {
+        "stream_key": {
+            "type": "apiKey",
+            "name": "stream_key",
+            "in": "header"
+        }
+    },
+    "security": [{
+        "stream_key": []
+    }],
+    "paths": {
+        "/companies": {
+            "$ref": "http://127.0.0.1:10000/api.ch.gov.uk-specifications/swagger-2.0/spec/stream.json#/companies"
+        },
+        "/filings": {
+            "$ref": "http://127.0.0.1:10000/api.ch.gov.uk-specifications/swagger-2.0/spec/stream.json#/filings"
+        },
+        "/insolvency-cases": {
+            "$ref": "http://127.0.0.1:10000/api.ch.gov.uk-specifications/swagger-2.0/spec/stream.json#/insolvency-cases"
+        },
+        "/charges": {
+            "$ref": "http://127.0.0.1:10000/api.ch.gov.uk-specifications/swagger-2.0/spec/stream.json#/charges"
+        },
+        "/officers": {
+            "$ref": "http://127.0.0.1:10000/api.ch.gov.uk-specifications/swagger-2.0/spec/stream.json#/officers"
+        },
+        "/persons-with-significant-control": {
+            "$ref": "http://127.0.0.1:10000/api.ch.gov.uk-specifications/swagger-2.0/spec/stream.json#/persons-with-significant-control"
+        },
+        "/disqualified-officers": {
+            "$ref": "http://127.0.0.1:10000/api.ch.gov.uk-specifications/swagger-2.0/spec/stream.json#/disqualified-officers"
+        },
+        "/company-exemptions": {
+            "$ref": "http://127.0.0.1:10000/api.ch.gov.uk-specifications/swagger-2.0/spec/stream.json#/company-exemptions"
+        },
+        "/persons-with-significant-control-statements": {
+            "$ref": "http://127.0.0.1:10000/api.ch.gov.uk-specifications/swagger-2.0/spec/stream.json#/persons-with-significant-control-statements"
+        }
+    }
+}

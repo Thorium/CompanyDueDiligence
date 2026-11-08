@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Fake.fs" />
+    <Compile Include="ClientTests.fs" />
+    <Compile Include="PagingTests.fs" />
+    <Compile Include="PacingTests.fs" />
+    <Compile Include="LookupTests.fs" />
+    <Compile Include="DocumentTests.fs" />
+    <Compile Include="ParseTests.fs" />
+    <Compile Include="StandingTests.fs" />
+    <Compile Include="RegistryTests.fs" />
+    <Compile Include="SourceTests.fs" />
+    <Compile Include="EuropeLookupSourceTests.fs" />
+    <Compile Include="OpenDataLookupSourceTests.fs" />
+    <Compile Include="UsStateSourceTests.fs" />
+    <Compile Include="NameMatchTests.fs" />
+    <Compile Include="PersonSearchTests.fs" />
+    <Compile Include="WorldLookupSourceTests.fs" />
+    <Compile Include="KeyedSourceTests.fs" />
+    <Compile Include="KeyedSourceTests2.fs" />
+    <Compile Include="KeyedSettingsTests.fs" />
+    <Compile Include="BulkDownloadsTests.fs" />
+    <Compile Include="BulkResolveTests.fs" />
+    <Compile Include="BulkSourceTests.fs" />
+    <Compile Include="BulkSourceTests2.fs" />
+    <Compile Include="BulkSourceTests3.fs" />
+    <Compile Include="BulkIndexTests.fs" />
+    <Compile Include="SanctionsTests.fs" />
+    <Compile Include="CaseFileTests.fs" />
+    <Compile Include="InvestigationTests.fs" />
+    <Compile Include="InvestigationFixTests.fs" />
+    <None Include="Fixtures\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures\*.csv" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures\*.xml" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures\*.txt" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
+    <PackageReference Include="xunit.v3.mtp-off" Version="4.0.1" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageReference Update="FSharp.Core" Version="10.1.401" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\CompanyDueDiligence\CompanyDueDiligence.fsproj" />
+  </ItemGroup>
+
+</Project>

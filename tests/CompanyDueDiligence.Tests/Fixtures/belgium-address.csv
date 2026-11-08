@@ -1,0 +1,6 @@
+"EntityNumber","TypeOfAddress","CountryNL","CountryFR","Zipcode","MunicipalityNL","MunicipalityFR","StreetNL","StreetFR","HouseNumber","Box","ExtraAddressInfo","DateStrikingOff"
+"0417.497.106","REGO",,,"1000","Brussel","Bruxelles","Grote Markt","Grand-Place","1",,,
+"0203.014.169","REGO",,,"2000","Antwerpen","Anvers","Meir","Meir","10","3",,"01-09-2026"
+"0876.543.270","REGO",,,"9000","Gent","Gand","Korenmarkt","Korenmarkt","5",,"Gebouw B",
+"0123.456.749","REGO","Verenigd Koninkrijk","Royaume-Uni","EC1A 1BB","Londen","Londres","Example Street","Example Street","2",,,
+"2.123.456.789","BAET",,,"3000","Leuven","Louvain","Bondgenotenlaan","Bondgenotenlaan","7",,,

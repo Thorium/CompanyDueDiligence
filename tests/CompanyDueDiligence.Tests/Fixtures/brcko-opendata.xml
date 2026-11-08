@@ -1,0 +1,87 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<OpenData>
+  <PoslovniSubjekat>
+    <NazivFirme>"DENI - COMPANI" d.o.o. za unutrašnju i vanjsku trgovinu i zastupanje, Bijela kbr. 108 A</NazivFirme>
+    <PoreskiBroj>4600039390002</PoreskiBroj>
+    <OblikOrganizovanja>DOO</OblikOrganizovanja>
+    <MBS>1-369</MBS>
+    <Status>Aktivan</Status>
+    <NACEŠifraGlavneDjelatnosti>73.11</NACEŠifraGlavneDjelatnosti>
+    <Ulica>Bijela broj </Ulica>
+    <Broj>108 A</Broj>
+    <NaseljenoMjesto>Bijela</NaseljenoMjesto>
+    <Općina>Brčko distrikt</Općina>
+    <DatumRegistracije>18.04.1996.</DatumRegistracije>
+    <DatumZadnjeIzmjene>31.12.2025.</DatumZadnjeIzmjene>
+  </PoslovniSubjekat>
+  <PoslovniSubjekat>
+    <NazivFirme>"GALAX - NISKOGRADNJA" dioničko društvo  Brčko</NazivFirme>
+    <PoreskiBroj>4600086390002</PoreskiBroj>
+    <OblikOrganizovanja>DD</OblikOrganizovanja>
+    <MBS>1-1175</MBS>
+    <Status>Aktivan</Status>
+    <NACEŠifraGlavneDjelatnosti>42.11</NACEŠifraGlavneDjelatnosti>
+    <Ulica>Bulevar Mira</Ulica>
+    <Broj>28</Broj>
+    <NaseljenoMjesto>Brčko</NaseljenoMjesto>
+    <Općina>Brčko distrikt</Općina>
+    <DatumRegistracije>28.03.1995.</DatumRegistracije>
+    <DatumZadnjeIzmjene>07.04.2026.</DatumZadnjeIzmjene>
+  </PoslovniSubjekat>
+  <PoslovniSubjekat>
+    <NazivFirme>"CONTRA IHM" d.o.o. za proizvodnju, promet i usluge Maoča</NazivFirme>
+    <PoreskiBroj>4600002800006</PoreskiBroj>
+    <OblikOrganizovanja>DOO</OblikOrganizovanja>
+    <MBS>1-37</MBS>
+    <Status>U procesu izmjene</Status>
+    <NACEŠifraGlavneDjelatnosti>41.20</NACEŠifraGlavneDjelatnosti>
+    <Ulica>Maoča</Ulica>
+    <Broj>bb</Broj>
+    <NaseljenoMjesto>Brčko</NaseljenoMjesto>
+    <Općina>Brčko distrikt</Općina>
+    <DatumRegistracije>23.11.1995.</DatumRegistracije>
+    <DatumZadnjeIzmjene>04.04.2023.</DatumZadnjeIzmjene>
+  </PoslovniSubjekat>
+  <PoslovniSubjekat>
+    <NazivFirme>Udruženje sportskih veterana "2009" Brčko distrikt BiH, Sandići bb</NazivFirme>
+    <PoreskiBroj>4600270720007</PoreskiBroj>
+    <OblikOrganizovanja>Udruženje građana</OblikOrganizovanja>
+    <MBS>96-05-0015-09</MBS>
+    <Status>U procesu prestanka</Status>
+    <NACEŠifraGlavneDjelatnosti>94.99</NACEŠifraGlavneDjelatnosti>
+    <Ulica>Sandići</Ulica>
+    <Broj>bb</Broj>
+    <NaseljenoMjesto>Brčko</NaseljenoMjesto>
+    <Općina>Brčko distrikt</Općina>
+    <DatumRegistracije>25.05.2009.</DatumRegistracije>
+    <DatumZadnjeIzmjene>29.09.2026.</DatumZadnjeIzmjene>
+  </PoslovniSubjekat>
+  <PoslovniSubjekat>
+    <NazivFirme />
+    <PoreskiBroj />
+    <OblikOrganizovanja>DD</OblikOrganizovanja>
+    <MBS />
+    <Status>Aktivan</Status>
+    <NACEŠifraGlavneDjelatnosti />
+    <Ulica />
+    <Broj />
+    <NaseljenoMjesto>Brčko</NaseljenoMjesto>
+    <Općina>Brčko distrikt</Općina>
+    <DatumRegistracije />
+    <DatumZadnjeIzmjene />
+  </PoslovniSubjekat>
+  <PoslovniSubjekat>
+    <NazivFirme>Društvo sa ograničenom odgovornošću za trgovinu i usluge "TND" Brčko distrikt BiH</NazivFirme>
+    <PoreskiBroj>	4600502870000</PoreskiBroj>
+    <OblikOrganizovanja>DOO</OblikOrganizovanja>
+    <MBS>96-01-0078-22</MBS>
+    <Status>Aktivan</Status>
+    <NACEŠifraGlavneDjelatnosti>62.01</NACEŠifraGlavneDjelatnosti>
+    <Ulica>Pere Marjana br.</Ulica>
+    <Broj>3</Broj>
+    <NaseljenoMjesto>Brčko</NaseljenoMjesto>
+    <Općina>Brčko distrikt</Općina>
+    <DatumRegistracije>17.06.2022.</DatumRegistracije>
+    <DatumZadnjeIzmjene>30.11.2022.</DatumZadnjeIzmjene>
+  </PoslovniSubjekat>
+</OpenData>

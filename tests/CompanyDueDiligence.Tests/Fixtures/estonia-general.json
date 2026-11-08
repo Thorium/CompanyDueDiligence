@@ -1,0 +1,328 @@
+[
+  {
+    "ariregistri_kood": 16752073,
+    "nimi": "007 Agent & Partners OÜ",
+    "yldandmed": {
+      "esmaregistreerimise_kpv": "05.06.2023",
+      "kustutamise_kpv": null,
+      "staatus": "R",
+      "staatus_tekstina": "Registrisse kantud",
+      "piirkond_tekstina": "Tartu",
+      "oiguslik_vorm": "OÜ",
+      "oiguslik_vorm_nr": 5,
+      "oiguslik_vorm_tekstina": "Osaühing",
+      "oigusliku_vormi_alaliik": null,
+      "oigusliku_vormi_alaliik_tekstina": "",
+      "staatused": [
+        {
+          "kaardi_piirkond": 5,
+          "kaardi_nr": 1,
+          "kaardi_tyyp": "R",
+          "kande_nr": 1,
+          "staatus": "R",
+          "staatus_tekstina": "Registrisse kantud",
+          "algus_kpv": "05.06.2023"
+        }
+      ],
+      "arinimed": [
+        {
+          "kirje_id": 10687763,
+          "kaardi_piirkond": 5,
+          "kaardi_nr": 1,
+          "kaardi_tyyp": "R",
+          "kande_nr": 1,
+          "sisu": "007 Agent & Partners OÜ",
+          "algus_kpv": "05.06.2023",
+          "lopp_kpv": null
+        }
+      ],
+      "aadressid": [
+        {
+          "kirje_id": 10687757,
+          "kaardi_piirkond": 5,
+          "kaardi_nr": 1,
+          "kaardi_tyyp": "R",
+          "kande_nr": 1,
+          "riik": "EST",
+          "riik_tekstina": "Eesti",
+          "ehak": "0596",
+          "ehak_nimetus": "Pirita linnaosa, Tallinn, Harju maakond",
+          "tanav_maja_korter": "Regati pst 12",
+          "aadress_ads__ads_oid": "EE03606376",
+          "aadress_ads__adr_id": 2363082,
+          "aadress_ads__ads_normaliseeritud_taisaadress": "Harju maakond, Tallinn, Pirita linnaosa, Regati pst 12",
+          "aadress_ads__ads_normaliseeritud_taisaadress_tapsustus": null,
+          "aadress_ads__koodaadress": "3778405960000063100009SJS00000000",
+          "aadress_ads__adob_id": "10262124",
+          "aadress_ads__tyyp": null,
+          "postiindeks": "11911",
+          "algus_kpv": "05.06.2023",
+          "lopp_kpv": null
+        }
+      ],
+      "kapitalid": [
+        {
+          "kirje_id": 10687761,
+          "kaardi_piirkond": 5,
+          "kaardi_nr": 1,
+          "kaardi_tyyp": "R",
+          "kande_nr": 1,
+          "kapitali_suurus": "0.01",
+          "kapitali_valuuta": "EUR",
+          "kapitali_valuuta_tekstina": "euro",
+          "algus_kpv": "05.06.2023",
+          "lopp_kpv": null
+        }
+      ]
+    }
+  },
+  {
+    "ariregistri_kood": 11979116,
+    "nimi": "102 Property Holding OÜ",
+    "yldandmed": {
+      "esmaregistreerimise_kpv": "17.08.2010",
+      "kustutamise_kpv": null,
+      "staatus": "L",
+      "staatus_tekstina": "Likvideerimisel",
+      "piirkond_tekstina": "Tartu",
+      "oiguslik_vorm": "OÜ",
+      "oiguslik_vorm_nr": 5,
+      "oiguslik_vorm_tekstina": "Osaühing",
+      "oigusliku_vormi_alaliik": null,
+      "oigusliku_vormi_alaliik_tekstina": "",
+      "staatused": [
+        {
+          "kaardi_piirkond": 1,
+          "kaardi_nr": 1,
+          "kaardi_tyyp": "R",
+          "kande_nr": 1,
+          "staatus": "R",
+          "staatus_tekstina": "Registrisse kantud",
+          "algus_kpv": "17.08.2010"
+        },
+        {
+          "kaardi_piirkond": 5,
+          "kaardi_nr": 1,
+          "kaardi_tyyp": "R",
+          "kande_nr": 11,
+          "staatus": "L",
+          "staatus_tekstina": "Likvideerimisel",
+          "algus_kpv": "31.07.2024"
+        }
+      ],
+      "arinimed": [
+        {
+          "kirje_id": 3854495,
+          "kaardi_piirkond": 1,
+          "kaardi_nr": 1,
+          "kaardi_tyyp": "R",
+          "kande_nr": 1,
+          "sisu": "102 Property Holding OÜ",
+          "algus_kpv": "17.08.2010",
+          "lopp_kpv": null
+        }
+      ],
+      "aadressid": [
+        {
+          "kirje_id": 7218223,
+          "kaardi_piirkond": 5,
+          "kaardi_nr": 1,
+          "kaardi_tyyp": "R",
+          "kande_nr": 7,
+          "riik": "EST",
+          "riik_tekstina": "Eesti",
+          "ehak": "4943",
+          "ehak_nimetus": "Miiduranna küla, Viimsi vald, Harju maakond",
+          "tanav_maja_korter": "Kristjani tee 1",
+          "aadress_ads__ads_oid": "EE02109687",
+          "aadress_ads__adr_id": 298960,
+          "aadress_ads__ads_normaliseeritud_taisaadress": "Harju maakond, Viimsi vald, Miiduranna küla, Kristjani tee 1",
+          "aadress_ads__ads_normaliseeritud_taisaadress_tapsustus": null,
+          "aadress_ads__koodaadress": "378904943000002ZF000032V600000000",
+          "aadress_ads__adob_id": "4517018",
+          "aadress_ads__tyyp": null,
+          "postiindeks": "74015",
+          "algus_kpv": "01.12.2017",
+          "lopp_kpv": null
+        }
+      ],
+      "kapitalid": [
+        {
+          "kirje_id": 4325931,
+          "kaardi_piirkond": 1,
+          "kaardi_nr": 1,
+          "kaardi_tyyp": "R",
+          "kande_nr": 3,
+          "kapitali_suurus": "2560.00",
+          "kapitali_valuuta": "EUR",
+          "kapitali_valuuta_tekstina": "euro",
+          "algus_kpv": "30.12.2011",
+          "lopp_kpv": null
+        }
+      ]
+    }
+  },
+  {
+    "ariregistri_kood": 11876557,
+    "nimi": "1Grupp A&M OÜ",
+    "yldandmed": {
+      "esmaregistreerimise_kpv": "07.01.2010",
+      "kustutamise_kpv": null,
+      "staatus": "N",
+      "staatus_tekstina": "Pankrotis",
+      "piirkond_tekstina": "Tartu",
+      "oiguslik_vorm": "OÜ",
+      "oiguslik_vorm_nr": 5,
+      "oiguslik_vorm_tekstina": "Osaühing",
+      "oigusliku_vormi_alaliik": null,
+      "oigusliku_vormi_alaliik_tekstina": "",
+      "staatused": [
+        {
+          "kaardi_piirkond": 1,
+          "kaardi_nr": 1,
+          "kaardi_tyyp": "R",
+          "kande_nr": 1,
+          "staatus": "R",
+          "staatus_tekstina": "Registrisse kantud",
+          "algus_kpv": "07.01.2010"
+        },
+        {
+          "kaardi_piirkond": 1,
+          "kaardi_nr": 1,
+          "kaardi_tyyp": "R",
+          "kande_nr": 6,
+          "staatus": "N",
+          "staatus_tekstina": "Pankrotis",
+          "algus_kpv": "29.04.2014"
+        }
+      ],
+      "arinimed": [
+        {
+          "kirje_id": 4016384,
+          "kaardi_piirkond": 1,
+          "kaardi_nr": 1,
+          "kaardi_tyyp": "R",
+          "kande_nr": 2,
+          "sisu": "1Grupp A&M OÜ",
+          "algus_kpv": "18.02.2011",
+          "lopp_kpv": null
+        }
+      ],
+      "aadressid": [
+        {
+          "kirje_id": 7211695,
+          "kaardi_piirkond": 5,
+          "kaardi_nr": 1,
+          "kaardi_tyyp": "R",
+          "kande_nr": 9,
+          "riik": "EST",
+          "riik_tekstina": "Eesti",
+          "ehak": "0298",
+          "ehak_nimetus": "Kesklinna linnaosa, Tallinn, Harju maakond",
+          "tanav_maja_korter": "Endla tn 4",
+          "aadress_ads__ads_oid": "EE03226229",
+          "aadress_ads__adr_id": 2264938,
+          "aadress_ads__ads_normaliseeritud_taisaadress": "Harju maakond, Tallinn, Kesklinna linnaosa, Endla tn 4",
+          "aadress_ads__ads_normaliseeritud_taisaadress_tapsustus": null,
+          "aadress_ads__koodaadress": "377840298000005XU00001D6200000000",
+          "aadress_ads__adob_id": "10501715",
+          "aadress_ads__tyyp": null,
+          "postiindeks": "10142",
+          "algus_kpv": "01.12.2017",
+          "lopp_kpv": null
+        }
+      ],
+      "kapitalid": [
+        {
+          "kirje_id": 4016388,
+          "kaardi_piirkond": 1,
+          "kaardi_nr": 1,
+          "kaardi_tyyp": "R",
+          "kande_nr": 2,
+          "kapitali_suurus": "2540.00",
+          "kapitali_valuuta": "EUR",
+          "kapitali_valuuta_tekstina": "euro",
+          "algus_kpv": "18.02.2011",
+          "lopp_kpv": null
+        }
+      ]
+    }
+  },
+  {
+    "ariregistri_kood": 17292225,
+    "nimi": "42 Tech Limited Eesti filiaal",
+    "yldandmed": {
+      "esmaregistreerimise_kpv": "30.07.2025",
+      "kustutamise_kpv": null,
+      "staatus": "R",
+      "staatus_tekstina": "Registrisse kantud",
+      "piirkond_tekstina": "Tartu",
+      "oiguslik_vorm": "FIL",
+      "oiguslik_vorm_nr": 10,
+      "oiguslik_vorm_tekstina": "Välismaa äriühingu filiaal",
+      "oigusliku_vormi_alaliik": null,
+      "oigusliku_vormi_alaliik_tekstina": "",
+      "staatused": [
+        {
+          "kaardi_piirkond": 5,
+          "kaardi_nr": 1,
+          "kaardi_tyyp": "R",
+          "kande_nr": 1,
+          "staatus": "R",
+          "staatus_tekstina": "Registrisse kantud",
+          "algus_kpv": "30.07.2025"
+        }
+      ],
+      "arinimed": [
+        {
+          "kirje_id": 13234137,
+          "kaardi_piirkond": 5,
+          "kaardi_nr": 1,
+          "kaardi_tyyp": "R",
+          "kande_nr": 1,
+          "sisu": "42 Tech Limited Eesti filiaal",
+          "algus_kpv": "30.07.2025",
+          "lopp_kpv": null
+        }
+      ],
+      "aadressid": [
+        {
+          "kirje_id": 13234123,
+          "kaardi_piirkond": 5,
+          "kaardi_nr": 1,
+          "kaardi_tyyp": "R",
+          "kande_nr": 1,
+          "riik": "EST",
+          "riik_tekstina": "Eesti",
+          "ehak": "0298",
+          "ehak_nimetus": "Kesklinna linnaosa, Tallinn, Harju maakond",
+          "tanav_maja_korter": "Tartu mnt 67/1-13b",
+          "aadress_ads__ads_oid": "ER03881146",
+          "aadress_ads__adr_id": 3458020,
+          "aadress_ads__ads_normaliseeritud_taisaadress": "Harju maakond, Tallinn, Kesklinna linnaosa, Tartu mnt 67/1-13b",
+          "aadress_ads__ads_normaliseeritud_taisaadress_tapsustus": null,
+          "aadress_ads__koodaadress": "377840298000005ZI00009IVGK0EJ0000",
+          "aadress_ads__adob_id": "10115013",
+          "aadress_ads__tyyp": null,
+          "postiindeks": "10115",
+          "algus_kpv": "30.07.2025",
+          "lopp_kpv": null
+        }
+      ],
+      "kapitalid": [
+        {
+          "kirje_id": 13234131,
+          "kaardi_piirkond": 5,
+          "kaardi_nr": 1,
+          "kaardi_tyyp": "R",
+          "kande_nr": 1,
+          "kapitali_suurus": "100.00",
+          "kapitali_valuuta": "GBP",
+          "kapitali_valuuta_tekstina": "Suurbritannia nael",
+          "algus_kpv": "30.07.2025",
+          "lopp_kpv": null
+        }
+      ]
+    }
+  }
+]

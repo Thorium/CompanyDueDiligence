@@ -1,0 +1,484 @@
+{
+  "swagger": "2.0",
+  "x-sortMethodsBy": [
+    "method"
+  ],
+  "info": {
+    "description": "For use only by Obliged Entities to report PSC Discrepancies",
+    "version": "1.0.1",
+    "title": "Discrepancies"
+  },
+  "schemes": ["https"],
+  "host": "api.company-information.service.gov.uk",
+  "basePath": "/",
+  "tags": [
+    {
+      "description": "Persons with significant control",
+      "name": "Persons with significant control"
+    }
+  ],
+  "securityDefinitions": {
+      "oauth2": {
+          "type": "oauth2",
+          "authorizationUrl": "https://identity.company-information.service.gov.uk/oauth2/authorise",
+          "flow": "implicit",
+          "scopes": {
+              "https://identity.company-information.service.gov.uk/user/profile.read": "User profile read permission",
+              "https://api.company-information.service.gov.uk/psc-discrepancy-reports.write-full": "Grants full PSC Discrepancy report access"
+          }
+      }
+  },
+  "paths": {
+    "/psc-discrepancy-reports": {
+      "post": {
+        "tags": [
+          "Persons with significant control"
+        ],
+        "summary": "Create a PSC discrepancy report",
+        "operationId": "createPscDiscrepancyReport",
+        "x-operationName": "create report",
+        "description": "Create a PSC discrepancy report",
+        "parameters": [
+          {
+            "in": "body",
+            "name": "Discrepancy report",
+            "schema": {
+              "$ref": "#/definitions/DiscrepancyReportPost"
+            }
+          }
+        ],
+        "security": [
+            {
+                "oauth2": [
+                    "https://identity.company-information.service.gov.uk/user/profile.read",
+                    "https://api.company-information.service.gov.uk/psc-discrepancy-reports.write-full"
+                ]
+            }
+        ],
+        "responses": {
+          "201": {
+            "description": "PSC discrepancy report created.",
+            "schema": {
+              "$ref": "#/definitions/DiscrepancyReportResponse"
+            }
+          },
+          "400": {
+            "$ref": "#/responses/BadRequest"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/psc-discrepancy-reports/{discrepancy-report-id}": {
+      "put": {
+        "tags": [
+          "Persons with significant control"
+        ],
+        "summary": "Update a PSC Discrepancy Report",
+        "operationId": "updatePscDiscrepancyReport",
+        "x-operationName": "update report",
+        "description": "Updates a PSC Discrepancy Report on the system",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "discrepancy-report-id",
+            "description": "ID of PSC Discrepancy Report",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "in": "body",
+            "name": "Discrepancy report",
+            "schema": {
+              "$ref": "#/definitions/DiscrepancyReportPut"
+            }
+          }
+        ],
+        "security": [
+            {
+                "oauth2": [
+                    "https://identity.company-information.service.gov.uk/user/profile.read",
+                    "https://api.company-information.service.gov.uk/psc-discrepancy-reports.write-full"
+                ]
+            }
+        ],
+        "responses": {
+          "200": {
+            "description": "PSC Discrepancy report updated",
+            "schema": {
+              "$ref": "#/definitions/DiscrepancyReportResponse"
+            }
+          },
+          "400": {
+            "$ref": "#/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/responses/NotAuthorised"
+          },
+          "403": {
+            "description": "Forbidden PSC Report already completed"
+          },
+          "404": {
+            "description": "No discrepancy report found with the discrepancy-report-id"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    },
+    "/psc-discrepancy-reports/{discrepancy-report-id}/discrepancies": {
+      "post": {
+        "tags": [
+          "Persons with significant control"
+        ],
+        "summary": "Create PSC discrepancies",
+        "operationId": "createDiscrepancy",
+        "x-operationName": "create discrepancies",
+        "description": "Creates a discrepancy for a PSC Discrepancy Report",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "discrepancy-report-id",
+            "description": "ID of PSC Discrepancy Report",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "in": "body",
+            "name": "user",
+            "schema": {
+              "$ref": "#/definitions/Discrepancy"
+            }
+          }
+        ],
+        "security": [
+            {
+                "oauth2": [
+                    "https://identity.company-information.service.gov.uk/user/profile.read",
+                    "https://api.company-information.service.gov.uk/psc-discrepancy-reports.write-full"
+                ]
+            }
+        ],
+        "responses": {
+          "201": {
+            "description": "Discrepancy created",
+            "schema": {
+              "$ref": "#/definitions/DiscrepancyResponse"
+            }
+          },
+          "400": {
+            "$ref": "#/responses/BadRequest"
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          }
+        }
+      }
+    }
+  },
+  "definitions" : {
+    "DiscrepancyReportPost" : {
+      "title": "DiscrepancyReportPost",
+      "type" : "object",
+      "required" : [ "material_discrepancies", "status" ],
+      "properties" : {
+        "material_discrepancies": {
+          "type" : "array",
+          "items" : {
+            "type" : "string",
+            "enum" : ["appears-to-conceal-details", "money-laundering", "terrorist-financing"],
+            "example" : "money-laundering, appears-to-conceal-details"
+          }
+        },
+        "obliged_entity_type" : {
+          "type" : "string",
+          "enum" : ["credit-institution", "financial-institution", "auditor-external-accountant-or-tax-advisor", "notary-or-independent-legal-professional", "trust-or-company-service-provider", "estate-agent-or-intermediary", "entity-trading-goods-in-cash-over-ten-thousand-euros", "gambling-service-provider", "exchange-service-provider-of-fiat-and-virtual-currencies", "custodian-wallet-provider", "art-dealer-galleries-and-auction-houses", "art-dealer-free-ports", "insolvency-practictioner"],
+          "example" : "financial-institution"
+        },
+        "obliged_entity_organisation_name" : {
+          "type" : "string",
+          "maximum" : 160,
+          "example" : "Barclays Bank"
+        },
+        "obliged_entity_contact_name" : {
+          "type" : "string",
+          "maximum" : 160,
+          "example" : "Joe Bloggs"
+        },
+        "obliged_entity_email" : {
+          "type" : "string",
+          "maximum" : 200,
+          "example" : "bob.holness@barclaysbank.com"
+        },
+        "company_number" : {
+          "type" : "string",
+          "maximum" : 8,
+          "example" : "02345678"
+        },
+        "status" : {
+          "type" : "string",
+          "enum" : [ "INCOMPLETE" ],
+          "example" : "INCOMPLETE"
+        }
+      }
+    },
+    "DiscrepancyReportPut" : {
+      "title": "DiscrepancyReportPut",
+      "type" : "object",
+      "required" : [ "material_discrepancies", "obliged_entity_type", "obliged_entity_organisation_name", "obliged_entity_contact_name", "obliged_entity_email", "company_number", "status" ],
+      "properties" : {
+        "material_discrepancies": {
+          "type" : "array",
+          "items" : {
+            "type" : "string",
+            "enum" : ["appears-to-conceal-details", "money-laundering", "terrorist-financing"],
+            "example" : "money-laundering, appears-to-conceal-details"
+          }
+        },
+        "obliged_entity_type" : {
+          "type" : "string",
+          "enum" : ["credit-institution", "financial-institution", "auditor-external-accountant-or-tax-advisor", "notary-or-independent-legal-professional", "trust-or-company-service-provider", "estate-agent-or-intermediary", "entity-trading-goods-in-cash-over-ten-thousand-euros", "gambling-service-provider", "exchange-service-provider-of-fiat-and-virtual-currencies", "custodian-wallet-provider", "art-dealer-galleries-and-auction-houses", "art-dealer-free-ports", "insolvency-practictioner"],
+          "example" : "financial-institution"
+        },
+        "obliged_entity_organisation_name" : {
+          "type" : "string",
+          "maximum" : 160,
+          "example" : "Barclays Bank"
+        },
+        "obliged_entity_contact_name" : {
+          "type" : "string",
+          "maximum" : 160,
+          "example" : "Joe Bloggs"
+        },
+        "obliged_entity_email" : {
+          "type" : "string",
+          "maximum" : 200,
+          "example" : "bob.holness@barclaysbank.com"
+        },
+        "company_number" : {
+          "type" : "string",
+          "maximum" : 8,
+          "example" : "02345678"
+        },
+        "status" : {
+          "type" : "string",
+          "enum" : [ "INCOMPLETE", "COMPLETE" ],
+          "example" : "INCOMPLETE"
+        }
+      }
+    },
+    "DiscrepancyReportResponse" : {
+      "title": "DiscrepancyReportResponse",
+      "type" : "object",
+      "required" : [ "material_discrepancies", "obliged_entity_type", "obliged_entity_organisation_name", "obliged_entity_contact_name", "obliged_entity_email", "company_number", "status" ],
+      "properties" : {
+        "material_discrepancies": {
+          "type" : "array",
+          "items" : {
+            "type" : "string",
+            "enum" : ["appears-to-conceal-details", "money-laundering", "terrorist-financing"],
+            "example" : "money-laundering, appears-to-conceal-details"
+          }
+        },
+        "obliged_entity_type" : {
+          "type" : "string",
+          "enum" : ["credit-institution", "financial-institution", "auditor-external-accountant-or-tax-advisor", "notary-or-independent-legal-professional", "trust-or-company-service-provider", "estate-agent-or-intermediary", "entity-trading-goods-in-cash-over-ten-thousand-euros", "gambling-service-provider", "exchange-service-provider-of-fiat-and-virtual-currencies", "custodian-wallet-provider", "art-dealer-galleries-and-auction-houses", "art-dealer-free-ports", "insolvency-practictioner"],
+          "example" : "financial-institution"
+        },
+        "obliged_entity_organisation_name" : {
+          "type" : "string",
+          "example" : "Barclays Bank"
+        },
+        "obliged_entity_contact_name" : {
+          "type" : "string",
+          "example" : "Joe Bloggs"
+        },
+        "obliged_entity_email" : {
+          "type" : "string",
+          "example" : "bob.holness@barclaysbank.com"
+        },
+        "company_number" : {
+          "type" : "string",
+          "example" : "02345678"
+        },
+        "status" : {
+          "type" : "string",
+          "enum" : [ "INCOMPLETE", "COMPLETE" ],
+          "example" : "INCOMPLETE"
+        },
+        "links" : {
+          "type" : "object",
+          "properties" : {
+            "self" : {
+              "type" : "string",
+              "example" : "/psc-discrepancy-reports/{discrepancy-report-id}"
+            }
+          }
+        },
+        "etag" : {
+          "type" : "string",
+          "example" : "33a64df551425fcc55e4d42a148795d9f25f89d4"
+        },
+        "kind" : {
+          "type" : "string",
+          "example" : "psc_discrepancy_report#psc_discrepancy_report"
+        }
+      }
+    },
+    "Discrepancy" : {
+      "title": "Discrepancy",
+      "required" : [ "details", "psc_type", "psc_name", "psc_date_of_birth", "psc_discrepancy_types" ],
+      "properties" : {
+        "details" : {
+          "type" : "string",
+          "maximum" : 5000,
+          "example" : "Name is incorrect"
+        },
+        "psc_name" : {
+          "type" : "string",
+          "maximum" : 200,
+          "description":"This field is not mandatory if the `psc_type` is **psc-is-missing**",
+          "example" : "Mrs Random Random"
+        },
+        "psc_date_of_birth" : {
+          "type" : "string",
+          "format" : "MM/YYYY",
+          "description": "This field is mandatory when the `psc_type` is **individual-person-with-significant-control**",
+          "example" : "05/1973"
+        },
+        "psc_type" : {
+          "type" : "string",
+          "enum" : [ "individual-person-with-significant-control", "individual-beneficial-owner", "corporate-entity-person-with-significant-control", "corporate-entity-beneficial-owner", "legal-person-person-with-significant-control", "legal-person-beneficial-owner", "psc-is-missing" ],
+          "example" : "individual-person-with-significant-control"
+        },
+        "psc_discrepancy_types" : {
+          "type" : "array",
+          "description" : "The values for `psc_discrepancy_types` are dependant on the value of the `psc_type` field. Common to all `psc_type` values are `Nature of control`, `Correspondence address`, `Notified date` and `Other reason`. For `individual-person-with-significant-control`: Name, Date of birth, Nationality and Place of residence. For `corporate-entity-person-with-significant-control`: Company name, Governing law, Legal form, Company number, Place of registration and Incorporation law. For `legal-person-person-with-significant-control`: Name, Governing law and Legal form. For `individual-beneficial-owner`: Name, Date of birth, Nationality, Place of residence  and Sanctioned. For `corporate-entity-beneficial-owner`: Company name, Governing law, Legal form, Company number, Place of registration, Incorporation law, Sanctioned and Principal office address. For `legal-person-beneficial-owner`: Name, Governing law, Legal form, Sanctioned and Principal office address.",
+          "items" : {
+            "type" : "string",
+            "enum" : [ "Nature of control", "Correspondence address", "Notified date", "Other reason", "Name", "Date of birth", "Nationality", "Country of residence", "Company name", "Governing law", "Legal form", "Company number", "Place of registration", "Incorporation law", "Principal office address", "Sanctioned" ],
+            "example" : "Nationality, Date of birth"
+          }
+        }
+      }
+    },
+    "DiscrepancyResponse" : {
+      "title": "DiscrepancyResponse",
+      "properties" : {
+        "details" : {
+          "type" : "string",
+          "example" : "Name is incorrect"
+        },
+        "psc_name" : {
+          "type" : "string",
+          "example" : "Mrs Random Random"
+        },
+        "psc_date_of_birth" : {
+          "type" : "string",
+          "format" : "MM/YYYY",
+          "example" : "05/1973"
+        },
+        "psc_type" : {
+          "type" : "string",
+          "enum" : [ "individual-person-with-significant-control", "individual-beneficial-owner", "corporate-entity-person-with-significant-control", "corporate-entity-beneficial-owner", "legal-person-person-with-significant-control", "legal-person-beneficial-owner", "psc-is-missing" ],
+          "example" : "individual-person-with-significant-control"
+        },
+        "psc_discrepancy_types" : {
+          "type" : "array",
+          "items" : {
+            "type" : "string",
+            "description" : "The values for `psc_discrepancy_types` are dependant on the value of the `psc_type` field. Common to all `psc_type` values are `Nature of control`, `Correspondence address`, `Notified date` and `Other reason`. For `individual-person-with-significant-control`: Name, Date of birth, Nationality and Place of residence. For `corporate-entity-person-with-significant-control`: Company name, Governing law, Legal form, Company number, Place of registration and Incorporation law. For `legal-person-person-with-significant-control`: Name, Governing law and Legal form. For `individual-beneficial-owner`: Name, Date of birth, Nationality, Place of residence  and Sanctioned. For `corporate-entity-beneficial-owner`: Company name, Governing law, Legal form, Company number, Place of registration, Incorporation law, Sanctioned and Principal office address. For `legal-person-beneficial-owner`: Name, Governing law, Legal form, Sanctioned and Principal office address.",
+            "example" : "Nationality, Date of birth"
+          }
+        },
+        "links" : {
+          "type" : "object",
+          "properties" : {
+            "self" : {
+              "type" : "string",
+              "example" : "/psc-discrepancy-reports/{discrepancy-report-id}/discrepancies/{discrepancy-id}"
+            },
+            "psc_discrepancy_report" : {
+              "type" : "string",
+              "example" : "/psc-discrepancy-reports/{discrepancy-report-id}"
+            }
+          }
+        },
+        "etag" : {
+          "type" : "string",
+          "example" : "33a64df551425fcc55e4d42a148795d9f25f89d4"
+        },
+        "kind" : {
+          "type" : "string",
+          "example" : "psc_discrepancy_report#psc_discrepancy_report"
+        }
+      }
+    },
+    "Error" : {
+      "title": "Error",
+      "type" : "object",
+      "properties" : {
+        "error" : {
+          "type" : "string"
+        },
+        "location" : {
+          "type" : "string"
+        },
+        "location_type" : {
+          "type" : "string"
+        },
+        "type" : {
+          "type" : "string"
+        }
+      }
+    },
+    "UnauthorisedError" : {
+      "title": "Unauthorised Error",
+      "type" : "object",
+      "properties" : {
+        "timestamp" : {
+          "type" : "string",
+          "example" : "2022-04-05T11:41:09.568+00:00"
+        },
+        "status" : {
+          "type" : "string",
+          "example" : "401"
+        },
+        "error" : {
+          "type" : "string",
+          "example" : "Unauthorized"
+        },
+        "path" : {
+          "type" : "string",
+          "example" : "/psc-discrepancy-reports/f020183f-b487-41ac-83b6-5bc9ee97a150"
+        }
+      }
+    }
+  },
+  "responses" : {
+    "BadRequest" : {
+      "description" : "The body has errors. The correct error is displayed if a single element is omitted from the call but if multiple elements are left out not all errors are displayed. Eg if only the status is added to the body of a /psc-discrepancy-reports POST the only error that fires is for the obliged-entity type and not the other 4 fields that are missing.",
+      "schema" : {
+        "$ref" : "#/definitions/Error"
+      }
+    },
+    "NotFound" : {
+      "description" : "Company cannot be found on the register",
+      "schema" : {
+        "$ref" : "#/definitions/Error"
+      }
+    },
+    "NotAuthorised" : {
+      "description" : "User is not authorised to update report",
+      "schema" : {
+        "$ref" : "#/definitions/UnauthorisedError"
+      }
+    }
+  }
+}

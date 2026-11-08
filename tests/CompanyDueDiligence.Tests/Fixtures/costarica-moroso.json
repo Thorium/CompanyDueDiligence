@@ -1,0 +1,34 @@
+{
+  "nombre": "INSTITUTO COSTARRICENSE DE ELECTRICIDAD",
+  "tipoIdentificacion": "02",
+  "regimen": {
+    "codigo": 1,
+    "descripcion": "Régimen general"
+  },
+  "situacion": {
+    "moroso": "SI",
+    "omiso": "NO",
+    "estado": "Inscrito",
+    "administracionTributaria": "Dirección de Grandes Contribuyentes Nacionales"
+  },
+  "actividades": [
+    {
+      "estado": "A",
+      "tipo": "P",
+      "codigo": "6110.0",
+      "descripcion": "Actividades de telecomunicaciones alámbricas"
+    },
+    {
+      "estado": "A",
+      "tipo": "S",
+      "codigo": "3510.0",
+      "descripcion": "Generación , transmisión y distribución de energía eléctrica"
+    },
+    {
+      "estado": "A",
+      "tipo": "S",
+      "codigo": "5229.0",
+      "descripcion": "Otras actividades  de apoyo al  transporte"
+    }
+  ]
+}

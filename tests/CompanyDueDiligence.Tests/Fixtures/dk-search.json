@@ -1,0 +1,1 @@
+{"_shards":{"failed":0,"skipped":0,"successful":6,"total":6},"hits":{"hits":[{"_id":"2834786","_index":"cvr-v-20200115","_score":16.309305,"_source":{"Vrvirksomhed":{"cvrNummer":15107707,"virksomhedMetadata":{"nyesteNavn":{"navn":"PARKEN SPORT & ENTERTAINMENT A/S"}}}},"_type":"_doc"}],"max_score":16.309305,"total":1},"timed_out":false,"took":7}

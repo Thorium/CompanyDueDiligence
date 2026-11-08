@@ -1,0 +1,1 @@
+callback({"Abn":"74172177893","AbnStatus":"Cancelled","AbnStatusEffectiveFrom":"2015-06-30","Acn":"","AddressDate":null,"AddressPostcode":"2600","AddressState":"ACT","BusinessName":[],"EntityName":"EXAMPLE TRUST","EntityTypeCode":"DTT","EntityTypeName":"Discretionary Trading Trust","Gst":null,"Message":""})

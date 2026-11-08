@@ -1,0 +1,171 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <RootNamespace>CompanyDueDiligence</RootNamespace>
+    <PackageId>CompanyDueDiligence</PackageId>
+    <Version>0.3.0</Version>
+    <Authors>Tuomas Hietanen</Authors>
+    <PackageLicenseExpression>Unlicense</PackageLicenseExpression>
+    <Description>A company due diligence case file for a compliance team: connects register records, filings, LEI data, sanctions list screening and vendor checks, with their links, flags and gaps, for an officer to decide. It decides nothing and never says clear. Reads 58 company registers in Europe, the Americas, Asia, Africa and Oceania, by API or from files the host downloads, and GLEIF. Unofficial; not affiliated with any of them.</Description>
+    <PackageTags>due-diligence;kyb;compliance;company-register;business-register;open-data;companies-house;sanctions;lei;fsharp</PackageTags>
+    <PackageProjectUrl>https://github.com/Thorium/CompanyDueDiligence</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Thorium/CompanyDueDiligence.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageReleaseNotes>v0.3.0:
+- CHANGED: Renamed to CompanyDueDiligence: package, namespace, solution and folder
+- REMOVED: Company.isGood, because the library doesn't judge a company
+- CHANGED: TryFindAsync answers Availability, so "not found" can be "can't tell"
+- CHANGED: Availability.NeedsEntitlement; OwnersAsync takes an OwnerPurpose
+- CHANGED: CompanyStanding.Registered holds a word or none; CompanyStanding.WindingUp added
+- CHANGED: a 401 from a source is AccessRefused
+- ADDED: Evidence.AsOf and Raw; Company.Role, HomeRegistration, EstablishmentOf and OtherNames; Coverage.Cost, RateLimit and Licence; AddressKind.PrincipalOffice, RegisteredAgent and Postal
+- ADDED: CaseFile with entities, links, evidence, flags, gaps, documents, notes, vendor checks and screenings; no overall result
+- ADDED: CaseJson, a strict round trip for a host to store; CaseExport.toText for an audit file
+- ADDED: Discrepancies across sources for name, number, status, address, legal form, capital and officers; different kinds are labelled, not flagged
+- ADDED: Investigation.openAsync and followAsync: every register covering a jurisdiction is read, exact code first; owners, establishments, home records and GLEIF parents are followed within limits; what can't be followed is a gap
+- ADDED: gaps for a register's partial coverage, a standing with no status word, data older than the read, owners without shares, and each withheld officer
+- ADDED: GLEIF cross-check in every outcome; a record outside the jurisdiction asked is Possible and not attached; a number's list is read up to 200, the rest Unread
+- ADDED: JurisdictionWords reads a wording whole, in English and native names, with Canadian, Buenos Aires and Brčko subdivisions
+- ADDED: VendorCheck, filled in by the host; a vendor's Clear stays that vendor's result on that date
+- ADDED: IDocumentReader and IFilingRegister; filings surfaced with insolvency and constitutional ones highlighted; no OCR ships
+- ADDED: SanctionsScreening over OFAC, UK and UN text the host supplies, with ListMinimums; possible matches only; EU is a stated gap
+- ADDED: CoverageRoutes for Delaware, Germany, Spain, Italy and Luxembourg, with no adapter scraping them; StandingWords.delaware for a paid source
+- ADDED: Sources.malta, france, finland, texas, gleif, norway, czechia, slovakia, ireland, poland, switzerland, latvia, netherlands, colorado, connecticut, newYork, oregon, pennsylvania, districtOfColumbia, britishColumbia, colombia, costaRica, israel, singapore and taiwan, with no key; all but the Netherlands run live on 2026-11-06 or 2026-11-08
+- ADDED: Sources.canada, newZealand, sweden, japan, zefix, california, australia, korea, croatia, greece, austria, denmark and kenya, behind a free key; not yet run live
+- ADDED: SourceKey and ClientCredentials, which print nothing; KeyedSources.fromEnvironment and fromSettings; SourceConnection refuses a handler that follows redirects, except in a browser
+- ADDED: BulkSources for Estonia, Cyprus, Romania, Slovenia, Belgium, Ukraine, Moldova, Serbia, Brčko, Florida, Alaska, ASIC, Paraguay, Brazil, Chile (two), Buenos Aires, Peru, Ecuador and Russia's SME register, read strictly as UTF-8 from files the host downloads, with a BulkFileDate
+- ADDED: BulkCatalogue and BulkDownloads: opt-in download of 17 bulk sources, 8 at fixed links and 9 found through the portal's official listing (CKAN, DCAT-AP, FNS meta.csv, WebDAV); Belgium, Florida and Moldova stay by hand
+- ADDED: BulkIndexes: a bulk register saved to disk once per download and opened in milliseconds; BulkDownloads keeps one per source
+- ADDED: NameMatch (Exact, StartsWith, Contains), INameMatchSearch and Registries.searchByNameAsync; Registries.forJurisdiction takes a register naming the exact code first
+- ADDED: IPersonSearch, by name, for France, Connecticut, New York, DC, Pennsylvania, Latvia and Companies House; never says "not a director"
+- ADDED: docs/keys.md, where to get each key; docs/candidate-sources.md, every country without a free automated route
+- ADDED: samples: a Bolero browser demo for GitHub Pages, and a local server that holds keys and bulk files
+- Companies House and the sources behind a key not yet run against their live APIs
+
+v0.2.0:
+- ADDED: CompanyConcerns on Company, with Stated and Unconfirmed; Company.isGood reads them with the standing
+- ADDED: OwnershipGap, OwnerStatementMeaning and OwnerListing.isComplete; Statements are classified, not raw codes
+- ADDED: EntityRegistration on Owner and Officer, from the identification block
+- ADDED: IdentityVerification on Owner and Officer, as published
+- ADDED: RegistryFailure.RequestRefused and RegistryFailure.isTemporary; 400, 403, 416 and other 4xx no longer read as Unavailable
+- ADDED: SearchResult.Complete; Api.Search.readAsync and companiesReadAsync with a cap of 1000 items
+- ADDED: Api.Appointments, Api.UkEstablishments, Api.DisqualifiedOfficers, with DisqualificationSearch never saying clear
+- ADDED: Pacing: 600 calls per 5 minutes, X-Ratelimit-Remain and X-Ratelimit-Reset if present, bounded retry of a 429
+- ADDED: Paging.MaxPages, allUpToAsync, allCountedAsync; failures InconsistentList and ListTooLong
+- CHANGED: A list answer without a readable total is InvalidResponse; Page.Total is an int and ItemsRaw a list per item
+- CHANGED: A list ends on an empty read at its total, one more call per list
+- CHANGED: Officers, PSCs and statements cross-check active, ended and total counts against the items
+- CHANGED: CompanyProfile flags are bool voption, a missing flag saying nothing; AnnualReturnOverdue and InsolvencyLink added
+- CHANGED: CompanyStanding.isGood is now isActive; insolvency history is a concern, not a standing
+- CHANGED: An unreadable end date, or a PSC with neither kind nor name, is InvalidResponse
+- Not yet run against the live API
+
+v0.1.0:
+- ADDED: CompanyRegistry contract: ICompanyRegistry, neutral records, Availability, Evidence, RegistryCoverage, fail-closed CompanyStanding
+- ADDED: CompaniesHouseRegistry, the first implementation
+- ADDED: Api calls for profiles, company search, officers, PSCs and statements, charges, insolvency, filing history, document metadata and content
+- ADDED: Api.getJsonAsync for any other Public Data path; Api.Paging.allAsync with guards against a repeated page and a short list
+- ADDED: 404 is ValueNone, 429 is RateLimited; a document's signed URL is read without the key
+- Not yet run against the live API</PackageReleaseNotes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\icon.png" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="Json.fs" />
+    <Compile Include="NameMatching.fs" />
+    <Compile Include="Registry.fs" />
+    <Compile Include="Filings.fs" />
+    <Compile Include="Client.fs" />
+    <Compile Include="Types.fs" />
+    <Compile Include="Parse.fs" />
+    <Compile Include="Api.fs" />
+    <Compile Include="CompaniesHouseRegistry.fs" />
+    <Compile Include="Sources\SourceHttp.fs" />
+    <Compile Include="Sources\OpenData.fs" />
+    <Compile Include="Sources\BulkFile.fs" />
+    <Compile Include="Sources\Bulk.fs" />
+    <Compile Include="Sources\BulkCodec.fs" />
+    <Compile Include="Sources\BulkIndex.fs" />
+    <Compile Include="Sources\Xlsx.fs" />
+    <Compile Include="Sources\Malta.fs" />
+    <Compile Include="Sources\France.fs" />
+    <Compile Include="Sources\Finland.fs" />
+    <Compile Include="Sources\Texas.fs" />
+    <Compile Include="Sources\Gleif.fs" />
+    <Compile Include="Sources\Norway.fs" />
+    <Compile Include="Sources\Czechia.fs" />
+    <Compile Include="Sources\Slovakia.fs" />
+    <Compile Include="Sources\Ireland.fs" />
+    <Compile Include="Sources\Poland.fs" />
+    <Compile Include="Sources\Switzerland.fs" />
+    <Compile Include="Sources\BritishColumbia.fs" />
+    <Compile Include="Sources\Israel.fs" />
+    <Compile Include="Sources\Singapore.fs" />
+    <Compile Include="Sources\Netherlands.fs" />
+    <Compile Include="Sources\Latvia.fs" />
+    <Compile Include="Sources\Colorado.fs" />
+    <Compile Include="Sources\Connecticut.fs" />
+    <Compile Include="Sources\NewYork.fs" />
+    <Compile Include="Sources\Oregon.fs" />
+    <Compile Include="Sources\Pennsylvania.fs" />
+    <Compile Include="Sources\DistrictOfColumbia.fs" />
+    <Compile Include="Sources\Taiwan.fs" />
+    <Compile Include="Sources\Colombia.fs" />
+    <Compile Include="Sources\CostaRica.fs" />
+    <Compile Include="Sources\Chile.fs" />
+    <Compile Include="Sources\Kenya.fs" />
+    <Compile Include="Sources\Australia.fs" />
+    <Compile Include="Sources\Korea.fs" />
+    <Compile Include="Sources\Croatia.fs" />
+    <Compile Include="Sources\Greece.fs" />
+    <Compile Include="Sources\Austria.fs" />
+    <Compile Include="Sources\Denmark.fs" />
+    <Compile Include="Sources\Canada.fs" />
+    <Compile Include="Sources\NewZealand.fs" />
+    <Compile Include="Sources\Sweden.fs" />
+    <Compile Include="Sources\Japan.fs" />
+    <Compile Include="Sources\Zefix.fs" />
+    <Compile Include="Sources\California.fs" />
+    <Compile Include="Sources\Moldova.fs" />
+    <Compile Include="Sources\Serbia.fs" />
+    <Compile Include="Sources\Brcko.fs" />
+    <Compile Include="Sources\ArgentinaIgj.fs" />
+    <Compile Include="Sources\ChileSii.fs" />
+    <Compile Include="Sources\Peru.fs" />
+    <Compile Include="Sources\Ecuador.fs" />
+    <Compile Include="Sources\RussiaSme.fs" />
+    <Compile Include="Sources\Estonia.fs" />
+    <Compile Include="Sources\Cyprus.fs" />
+    <Compile Include="Sources\Romania.fs" />
+    <Compile Include="Sources\Slovenia.fs" />
+    <Compile Include="Sources\Belgium.fs" />
+    <Compile Include="Sources\Ukraine.fs" />
+    <Compile Include="Sources\Florida.fs" />
+    <Compile Include="Sources\Paraguay.fs" />
+    <Compile Include="Sources\Brazil.fs" />
+    <Compile Include="Sources\AsicCompanies.fs" />
+    <Compile Include="Sources\Alaska.fs" />
+    <Compile Include="Sources\Catalogue.fs" />
+    <Compile Include="Sources\BulkResolve.fs" />
+    <Compile Include="Sources\BulkDownloads.fs" />
+    <Compile Include="Sanctions.fs" />
+    <Compile Include="Routes.fs" />
+    <Compile Include="CaseFile.fs" />
+    <Compile Include="Investigation.fs" />
+    <Compile Include="CaseJson.fs" />
+    <InternalsVisibleTo Include="CompanyDueDiligence.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="FSharp.Core" Version="10.1.401" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,133 @@
+[
+  {
+    "ariregistri_kood": 16752073,
+    "nimi": "007 Agent & Partners OÜ",
+    "kasusaajad": [
+      {
+        "kirje_id": 9001580186,
+        "algus_kpv": "05.06.2023",
+        "lopp_kpv": null,
+        "eesnimi": "PERSON",
+        "nimi": "ONE",
+        "isikukood": null,
+        "valis_kood": null,
+        "valis_kood_riik": null,
+        "valis_kood_riik_tekstina": null,
+        "synniaeg": null,
+        "aadress_riik": "EST",
+        "aadress_riik_tekstina": "Eesti",
+        "kontrolli_teostamise_viis": "O",
+        "kontrolli_teostamise_viis_tekstina": "otsene osalus",
+        "lahknevusteade_esitatud": null,
+        "isikukood_hash": null
+      }
+    ]
+  },
+  {
+    "ariregistri_kood": 11979116,
+    "nimi": "102 Property Holding OÜ",
+    "kasusaajad": [
+      {
+        "kirje_id": 9000662536,
+        "algus_kpv": "04.09.2018",
+        "lopp_kpv": null,
+        "eesnimi": "PERSON",
+        "nimi": "SEVEN",
+        "isikukood": null,
+        "valis_kood": null,
+        "valis_kood_riik": "FIN",
+        "valis_kood_riik_tekstina": "Soome",
+        "synniaeg": null,
+        "aadress_riik": "FIN",
+        "aadress_riik_tekstina": "Soome",
+        "kontrolli_teostamise_viis": "K",
+        "kontrolli_teostamise_viis_tekstina": "kaudne osalus",
+        "lahknevusteade_esitatud": null,
+        "isikukood_hash": null
+      },
+      {
+        "kirje_id": 9000662559,
+        "algus_kpv": "04.09.2018",
+        "lopp_kpv": null,
+        "eesnimi": "PERSON",
+        "nimi": "EIGHT",
+        "isikukood": null,
+        "valis_kood": null,
+        "valis_kood_riik": "FIN",
+        "valis_kood_riik_tekstina": "Soome",
+        "synniaeg": null,
+        "aadress_riik": "FIN",
+        "aadress_riik_tekstina": "Soome",
+        "kontrolli_teostamise_viis": "J",
+        "kontrolli_teostamise_viis_tekstina": "kõrgema juhtorgani liige. s.o juhatuse liige või nõukogu liige",
+        "lahknevusteade_esitatud": null,
+        "isikukood_hash": null
+      },
+      {
+        "kirje_id": 9000662552,
+        "algus_kpv": "04.09.2018",
+        "lopp_kpv": null,
+        "eesnimi": "PERSON",
+        "nimi": "NINE",
+        "isikukood": null,
+        "valis_kood": null,
+        "valis_kood_riik": "FIN",
+        "valis_kood_riik_tekstina": "Soome",
+        "synniaeg": null,
+        "aadress_riik": "FIN",
+        "aadress_riik_tekstina": "Soome",
+        "kontrolli_teostamise_viis": "J",
+        "kontrolli_teostamise_viis_tekstina": "kõrgema juhtorgani liige. s.o juhatuse liige või nõukogu liige",
+        "lahknevusteade_esitatud": null,
+        "isikukood_hash": null
+      },
+      {
+        "kirje_id": 9000662540,
+        "algus_kpv": "04.09.2018",
+        "lopp_kpv": null,
+        "eesnimi": "PERSON",
+        "nimi": "TWO",
+        "isikukood": null,
+        "valis_kood": null,
+        "valis_kood_riik": null,
+        "valis_kood_riik_tekstina": null,
+        "synniaeg": null,
+        "aadress_riik": "EST",
+        "aadress_riik_tekstina": "Eesti",
+        "kontrolli_teostamise_viis": "J",
+        "kontrolli_teostamise_viis_tekstina": "kõrgema juhtorgani liige. s.o juhatuse liige või nõukogu liige",
+        "lahknevusteade_esitatud": null,
+        "isikukood_hash": null
+      }
+    ]
+  },
+  {
+    "ariregistri_kood": 11876557,
+    "nimi": "1Grupp A&M OÜ",
+    "kasusaajad": [
+      {
+        "kirje_id": 9003522389,
+        "algus_kpv": "06.02.2026",
+        "lopp_kpv": null,
+        "eesnimi": "PERSON",
+        "nimi": "FOUR",
+        "isikukood": null,
+        "valis_kood": null,
+        "valis_kood_riik": null,
+        "valis_kood_riik_tekstina": null,
+        "synniaeg": null,
+        "aadress_riik": "EST",
+        "aadress_riik_tekstina": "Eesti",
+        "kontrolli_teostamise_viis": "F",
+        "kontrolli_teostamise_viis_tekstina": "Muul viisil kontroll või mõju (lepingulised, perekondlikud vm suhted)",
+        "lahknevusteade_esitatud": null,
+        "isikukood_hash": null
+      }
+    ]
+  },
+  {
+    "ariregistri_kood": 17292225,
+    "nimi": "42 Tech Limited Eesti filiaal",
+    "kasusaajad": []
+  }
+]

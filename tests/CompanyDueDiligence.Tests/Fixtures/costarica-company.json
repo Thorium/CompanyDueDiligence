@@ -1,0 +1,28 @@
+{
+  "nombre": "BANCO BAC SAN JOSE SOCIEDAD ANONIMA",
+  "tipoIdentificacion": "02",
+  "regimen": {
+    "codigo": 1,
+    "descripcion": "Régimen general"
+  },
+  "situacion": {
+    "moroso": "NO",
+    "omiso": "NO",
+    "estado": "Inscrito",
+    "administracionTributaria": "Dirección de Grandes Contribuyentes Nacionales"
+  },
+  "actividades": [
+    {
+      "estado": "A",
+      "tipo": "P",
+      "codigo": "6419.0",
+      "descripcion": "Otros tipos de intermediación monetaria"
+    },
+    {
+      "estado": "A",
+      "tipo": "S",
+      "codigo": "6492.0",
+      "descripcion": "Otros tipos de crédito"
+    }
+  ]
+}

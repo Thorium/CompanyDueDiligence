@@ -1,0 +1,16 @@
+{
+  "nombre": "VALAZO SOCIEDAD ANONIMA",
+  "tipoIdentificacion": "02",
+  "regimen": {
+    "codigo": 0,
+    "descripcion": "No Tiene"
+  },
+  "situacion": {
+    "moroso": "NO",
+    "omiso": "NO",
+    "estado": "Desinscrito oficio",
+    "administracionTributaria": "San José Oeste",
+    "mensaje": "El emisor tiene condición diferente a “Inscrito”. Por favor verifique su “estado tributario” en:  https://atv.hacienda.go.cr/ATV/frmConsultaSituTributaria.aspx. Debe estar inscrito antes de enviar sus comprobantes electrónicos en formato XML para su validación."
+  },
+  "actividades": []
+}

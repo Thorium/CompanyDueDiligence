@@ -1,0 +1,59 @@
+{
+    "DatumPreseka": "2026-10-31",
+    "Podaci": {
+        "17003313": {
+            "PoslovnoIme": "PROIZVODNO TRGOVINSKO PREDUZEĆE JASENOVO AD  NOVA VAROŠ",
+            "SifraOpstine": "70866",
+            "NazivOpstine": "НОВА ВАРОШ",
+            "NazivStatus": "Активан",
+            "DatumOsnivanja": "1994-08-25",
+            "NazivPravneForme": "Акционарско друштво",
+            "SifraDelatnosti": "5510"
+        },
+        "17003437": {
+            "PoslovnoIme": "PROIZVODNO-TRGOVINSKO PREDUZEĆE MANFILD DОO BUJANOVAC",
+            "SifraOpstine": "70351",
+            "NazivOpstine": "БУЈАНОВАЦ",
+            "NazivStatus": "У ликвидацији",
+            "DatumOsnivanja": "1994-06-21",
+            "NazivPravneForme": "Друштво са ограниченом одговорношћу",
+            "SifraDelatnosti": "1629"
+        },
+        "17004999": {
+            "PoslovnoIme": "TRANSPORTNO PREDUZEĆE SIMPLON DOO LESKOVAC - U STEČAJU",
+            "SifraOpstine": "70726",
+            "NazivOpstine": "ЛЕСКОВАЦ",
+            "NazivStatus": "У стечају",
+            "DatumOsnivanja": "1994-09-23",
+            "NazivPravneForme": "Друштво са ограниченом одговорношћу",
+            "SifraDelatnosti": "4931"
+        },
+        "17012142": {
+            "PoslovnoIme": "PROIZVODNO PROMETNO TRGOVINSKO I USLUŽNO PREDUZEĆE DRUM PRODUKT DOO SURDULICA - U PRINUDNOJ LIKVIDACIJI",
+            "SifraOpstine": "71137",
+            "NazivOpstine": "СУРДУЛИЦА",
+            "NazivStatus": "У принудној ликвидацији",
+            "DatumOsnivanja": "1993-02-24",
+            "NazivPravneForme": "Друштво са ограниченом одговорношћу",
+            "SifraDelatnosti": "0125"
+        },
+        "20013010": {
+            "PoslovnoIme": "S.I.S. AGRICULTURAL ENGINEERING LUSAKA OGRANAK GOLUBAC",
+            "SifraOpstine": "70475",
+            "NazivOpstine": "ГОЛУБАЦ",
+            "NazivStatus": "Активан",
+            "DatumOsnivanja": "2005-02-17",
+            "NazivPravneForme": "Огранак страног привредног друштва",
+            "SifraDelatnosti": "4661"
+        },
+        "22005464": {
+            "PoslovnoIme": "PRIVREDNO DRUŠTVO PROPOINT DOO POŽAREVAC",
+            "SifraOpstine": "70947",
+            "NazivOpstine": "ПОЖАРЕВАЦ",
+            "NazivStatus": "Активан",
+            "DatumOsnivanja": "2024-04-15",
+            "NazivPravneForme": "Друштво са ограниченом одговорношћу",
+            "SifraDelatnosti": "4651"
+        }
+    }
+}

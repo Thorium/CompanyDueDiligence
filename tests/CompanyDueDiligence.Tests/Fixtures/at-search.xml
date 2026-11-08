@@ -1,0 +1,26 @@
+<env:Envelope xmlns:env="http://www.w3.org/2003/05/soap-envelope">
+  <env:Header/>
+  <env:Body>
+    <ns13:SUCHEFIRMARESPONSE ns13:REQUEST_EXAKTESUCHE="false" ns13:REQUEST_FIRMENWORTLAUT="mayer" ns13:REQUEST_GERICHT="" ns13:REQUEST_ORTNR="" ns13:REQUEST_RECHTSEIGENSCHAFT="" ns13:REQUEST_RECHTSFORM="" ns13:REQUEST_SUCHBEREICH="1" xmlns:ns13="ns://firmenbuch.justiz.gv.at/Abfrage/SucheFirmaResponse">
+      <ns13:ERGEBNIS>
+        <ns13:FNR>145733p</ns13:FNR>
+        <ns13:STATUS>gelöscht</ns13:STATUS>
+        <ns13:NAME>"A &amp; S" Mayer OEG</ns13:NAME>
+        <ns13:SITZ>Wien</ns13:SITZ>
+        <ns13:RECHTSFORM><ns13:CODE>OG</ns13:CODE><ns13:TEXT>Offene Gesellschaft</ns13:TEXT></ns13:RECHTSFORM>
+        <ns13:RECHTSEIGENSCHAFT/>
+        <ns13:GERICHT><ns13:CODE>007</ns13:CODE><ns13:TEXT>Handelsgericht Wien</ns13:TEXT></ns13:GERICHT>
+      </ns13:ERGEBNIS>
+      <ns13:ERGEBNIS>
+        <ns13:FNR>58468h</ns13:FNR>
+        <ns13:STATUS/>
+        <ns13:NAME>Mayer Handels</ns13:NAME>
+        <ns13:NAME>Gesellschaft m.b.H.</ns13:NAME>
+        <ns13:SITZ>Graz</ns13:SITZ>
+        <ns13:RECHTSFORM><ns13:CODE>GES</ns13:CODE><ns13:TEXT>Gesellschaft mit beschränkter Haftung</ns13:TEXT></ns13:RECHTSFORM>
+        <ns13:RECHTSEIGENSCHAFT/>
+        <ns13:GERICHT><ns13:CODE>219</ns13:CODE><ns13:TEXT>Landesgericht für ZRS Graz</ns13:TEXT></ns13:GERICHT>
+      </ns13:ERGEBNIS>
+    </ns13:SUCHEFIRMARESPONSE>
+  </env:Body>
+</env:Envelope>

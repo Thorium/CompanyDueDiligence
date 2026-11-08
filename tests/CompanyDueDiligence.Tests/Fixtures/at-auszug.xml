@@ -1,0 +1,39 @@
+<env:Envelope xmlns:env="http://www.w3.org/2003/05/soap-envelope">
+  <env:Header/>
+  <env:Body>
+    <ns6:AUSZUG_V2_RESPONSE ns6:ABFRAGEZEITPUNKT="2026-11-06T13:00:00.000+01:00" ns6:FNR="58468 h" ns6:PRUEFSUMME="452407D2F7C4C4A3ED83D51DFB961E82" ns6:STICHTAG="2026-11-06" ns6:UMFANG="Kurzinformation" xmlns:ns6="ns://firmenbuch.justiz.gv.at/Abfrage/v2/AuszugResponse">
+      <ns6:FIRMA>
+        <ns6:FI_DKZ02 ns6:AUFRECHT="false" ns6:VNR="001">
+          <ns6:BEZEICHNUNG>EDV-Technik Went</ns6:BEZEICHNUNG>
+        </ns6:FI_DKZ02>
+        <ns6:FI_DKZ02 ns6:AUFRECHT="true" ns6:VNR="012">
+          <ns6:BEZEICHNUNG>EDV-Technik Dipl.-Ing. Went</ns6:BEZEICHNUNG>
+          <ns6:BEZEICHNUNG>Gesellschaft m.b.H.</ns6:BEZEICHNUNG>
+        </ns6:FI_DKZ02>
+        <ns6:FI_DKZ03 ns6:AUFRECHT="true" ns6:VNR="034">
+          <ns6:STELLE>Kärntner Straße 337</ns6:STELLE>
+          <ns6:STAAT>AUT</ns6:STAAT>
+          <ns6:PLZ>8054</ns6:PLZ>
+          <ns6:ORT>Graz</ns6:ORT>
+          <ns6:ZUSTELLBAR>true</ns6:ZUSTELLBAR>
+        </ns6:FI_DKZ03>
+        <ns6:FI_DKZ06 ns6:AUFRECHT="true" ns6:VNR="001">
+          <ns6:SITZ>Graz</ns6:SITZ>
+        </ns6:FI_DKZ06>
+        <ns6:FI_DKZ07 ns6:AUFRECHT="true" ns6:VNR="001">
+          <ns6:RECHTSFORM>
+            <ns6:CODE>GES</ns6:CODE>
+            <ns6:TEXT>Gesellschaft mit beschränkter Haftung</ns6:TEXT>
+          </ns6:RECHTSFORM>
+        </ns6:FI_DKZ07>
+      </ns6:FIRMA>
+      <ns6:VOLLZ>
+        <ns6:VNR>001</ns6:VNR>
+        <ns6:VOLLZUGSDATUM>1990-05-02</ns6:VOLLZUGSDATUM>
+        <ns6:HG><ns6:CODE>219</ns6:CODE><ns6:TEXT>Landesgericht für ZRS Graz</ns6:TEXT></ns6:HG>
+        <ns6:AZ>037 FN 58468/90 h</ns6:AZ>
+        <ns6:ANTRAGSTEXT>Neueintragung</ns6:ANTRAGSTEXT>
+      </ns6:VOLLZ>
+    </ns6:AUSZUG_V2_RESPONSE>
+  </env:Body>
+</env:Envelope>

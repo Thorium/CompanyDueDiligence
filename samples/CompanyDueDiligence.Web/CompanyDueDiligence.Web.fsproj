@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <!-- A browser demo over the keyless sources that allow calls from a web page. Published to GitHub Pages by .github/workflows/pages.yml. samples/CompanyDueDiligence.Server hosts the same page with an API, which it uses when api/mode answers. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <!-- The library's sources are found by reflection-free code, so trimming is safe to leave on its defaults. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Registers.fs" />
+    <Compile Include="Dto.fs" />
+    <Compile Include="Main.fs" />
+    <Compile Include="Startup.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="FSharp.Core" Version="10.1.401" />
+    <PackageReference Include="Bolero" Version="0.25.65" />
+    <PackageReference Include="Bolero.Build" Version="0.25.65" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.14" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.14" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\CompanyDueDiligence\CompanyDueDiligence.fsproj" />
+  </ItemGroup>
+
+</Project>

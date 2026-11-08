@@ -1,0 +1,1 @@
+callback({"Abn":"26008672179","AbnStatus":"Active","AbnStatusEffectiveFrom":"1999-11-01","Acn":"008672179","AddressDate":"2019-04-16","AddressPostcode":"3000","AddressState":"VIC","BusinessName":["EXAMPLE TRADING","EXAMPLE STORES"],"EntityName":"EXAMPLE HOLDINGS PTY LTD","EntityTypeCode":"PRV","EntityTypeName":"Australian Private Company","Gst":"2000-07-01","Message":""})

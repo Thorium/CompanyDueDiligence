@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CompanyDueDiligence/CompanyDueDiligence.fsproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/CompanyDueDiligence.Web/CompanyDueDiligence.Web.fsproj" />
+    <Project Path="samples/CompanyDueDiligence.Server/CompanyDueDiligence.Server.fsproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CompanyDueDiligence.Tests/CompanyDueDiligence.Tests.fsproj" />
+    <Project Path="tests/CompanyDueDiligence.Server.Tests/CompanyDueDiligence.Server.Tests.fsproj" />
+  </Folder>
+</Solution>
