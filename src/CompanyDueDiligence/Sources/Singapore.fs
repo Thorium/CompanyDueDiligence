@@ -142,7 +142,7 @@ module internal Singapore =
     /// The term without accents, as data.gov.sg refuses any other letter with a 409; none when it still holds one or is blank.
     let searchTerm (name: string) =
         let plain =
-            (if isNull name then "" else name.Trim()).Normalize(Text.NormalizationForm.FormD)
+            (if isNull name then "" else name.Trim()).Normalize Text.NormalizationForm.FormD
             |> String.filter (fun c ->
                 Globalization.CharUnicodeInfo.GetUnicodeCategory c
                 <> Globalization.UnicodeCategory.NonSpacingMark)

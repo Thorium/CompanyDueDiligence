@@ -159,9 +159,64 @@ let ``being liquidated, or an insolvency link, is an insolvency history whatever
     )
 
 [<Fact>]
-let ``only one insolvency flag saying no doesn't clear it`` () =
+let ``has_been_liquidated alone saying no doesn't clear it`` () =
     Assert.Equal<CompanyConcern list>(
         [ CompanyConcern.InsolvencyHistory ],
+        (CompanyProfile.concerns
+            { active with
+                HasInsolvencyHistory = ValueNone
+            })
+            .Unconfirmed
+    )
+
+[<Fact>]
+let ``an overseas company without a confirmation statement leaves annual filing out, not unconfirmed`` () =
+    let concerns =
+        CompanyProfile.concerns
+            { active with
+                Type = ValueSome "oversea-company"
+                ConfirmationStatementOverdue = ValueNone
+                AnnualReturnOverdue = ValueNone
+                RegisteredOfficeInDispute = ValueNone
+            }
+
+    Assert.Equal<CompanyConcern list>([ CompanyConcern.RegisteredOfficeDisputed ], concerns.Unconfirmed)
+
+[<Fact>]
+let ``a UK establishment's missing flags stay unconfirmed on its own record, since they apply on its overseas company``
+    ()
+    =
+    let concerns =
+        CompanyProfile.concerns
+            { active with
+                Type = ValueSome "uk-establishment"
+                AccountsOverdue = ValueSome true
+                ConfirmationStatementOverdue = ValueNone
+                AnnualReturnOverdue = ValueNone
+                RegisteredOfficeInDispute = ValueNone
+                UndeliverableRegisteredOffice = ValueNone
+                HasInsolvencyHistory = ValueNone
+                HasBeenLiquidated = ValueNone
+            }
+
+    Assert.Equal(4, concerns.Unconfirmed.Length)
+    Assert.Equal<CompanyConcern list>([ CompanyConcern.AccountsOverdue ], concerns.Stated)
+
+[<Fact>]
+let ``a home company missing a flag still leaves it unconfirmed`` () =
+    let concerns =
+        CompanyProfile.concerns
+            { active with
+                Type = ValueSome "ltd"
+                ConfirmationStatementOverdue = ValueNone
+                AnnualReturnOverdue = ValueNone
+            }
+
+    Assert.Equal<CompanyConcern list>([ CompanyConcern.AnnualFilingOverdue ], concerns.Unconfirmed)
+
+[<Fact>]
+let ``has_insolvency_history saying no clears it without the deprecated has_been_liquidated`` () =
+    Assert.Empty(
         (CompanyProfile.concerns
             { active with
                 HasBeenLiquidated = ValueNone

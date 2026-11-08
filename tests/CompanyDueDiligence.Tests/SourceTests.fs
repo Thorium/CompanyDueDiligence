@@ -422,7 +422,7 @@ let ``a Finnish search holding a ceased company reads it, and one company that c
         let nameless = """{"businessId":{"value":"0000001-9"},"names":[]}"""
 
         use handler =
-            new FakeHandler(fun _ -> ok (body.Replace("\"companies\":[", "\"companies\":[" + nameless + ",")))
+            new FakeHandler(fun _ -> ok (body.Replace("\"companies\":[", $"\"companies\":[{nameless},")))
 
         match! (Sources.finland (connectionOver handler)).SearchAsync("Arkkitehtityö Virtanen", fi, ct) with
         | Ok { Value = Available found } ->
@@ -868,7 +868,7 @@ let ``each source declares what it costs, its pace and its licence`` () =
         Assert.NotEmpty registry.Coverage.Licence
 
     let france = (Sources.france (connectionOver handler)).Coverage
-    Assert.Contains("No data licence stated", france.Licence)
+    Assert.Contains("Licence Ouverte 2.0", france.Licence)
 
 [<Fact>]
 let ``GLEIF finds by a reported number, in that country only, with the data's date`` () : Task =

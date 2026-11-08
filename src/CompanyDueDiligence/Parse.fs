@@ -6,15 +6,19 @@ open System.Text.Json
 open CompanyDueDiligence
 open CompanyDueDiligence.Json
 
+/// A blank part, such as the "po_box": "" sandbox answers carry, is left out.
 let private address (e: JsonElement) : Address =
+    let part name =
+        tryString name e |> ValueOption.filter (System.String.IsNullOrWhiteSpace >> not)
+
     {
         Lines =
             [ "care_of"; "po_box"; "premises"; "address_line_1"; "address_line_2" ]
-            |> List.choose (fun name -> tryString name e |> ValueOption.toOption)
-        Locality = tryString "locality" e
-        Region = tryString "region" e
-        PostalCode = tryString "postal_code" e
-        Country = tryString "country" e
+            |> List.choose (part >> ValueOption.toOption)
+        Locality = part "locality"
+        Region = part "region"
+        PostalCode = part "postal_code"
+        Country = part "country"
     }
 
 let private addressAt name e =

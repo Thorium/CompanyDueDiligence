@@ -23,7 +23,7 @@ let private sized (bytes: int64) (id: string) =
         { entry with
             Delivery = BulkDelivery.Links(links |> List.map (fun link -> { link with ApproximateBytes = bytes }))
         }
-    | _ -> entry
+    | BulkDelivery.Resolved _ | BulkDelivery.ByHand _ -> entry
 
 let private serbiaEntry = sized (fixtureBytes "serbia-companies.json") "RS"
 
@@ -61,7 +61,7 @@ let ``the catalogue lists every bulk source once, with links, a resolver or a wa
         | BulkDelivery.ByHand how -> Assert.False(String.IsNullOrWhiteSpace how)
 
 [<Fact>]
-let ``nine sources are resolved through a listing, and three stay by hand`` () =
+let ``seven sources have fixed links, nine are resolved through a listing, and four stay by hand`` () =
     let ids kind =
         BulkCatalogue.all
         |> List.filter (fun entry -> kind entry.Delivery)
@@ -69,17 +69,24 @@ let ``nine sources are resolved through a listing, and three stay by hand`` () =
         |> List.sort
 
     Assert.Equal<string list>(
-        [ "AR-C"; "AU-ASIC"; "BR"; "CL-RES"; "CY"; "RO"; "RU-SME"; "SI"; "UA" ],
+        [ "BA-BRC"; "EC"; "EE"; "PE"; "PY"; "RS"; "US-AK" ],
         ids (function
-            | BulkDelivery.Resolved _ -> true
-            | _ -> false)
+            | BulkDelivery.Links _ -> true
+            | BulkDelivery.Resolved _ | BulkDelivery.ByHand _ -> false)
     )
 
     Assert.Equal<string list>(
-        [ "BE"; "MD"; "US-FL" ],
+        [ "AR-C"; "AU-ASIC"; "BR"; "CL-RES"; "CY"; "RO"; "RU-SME"; "SI"; "UA" ],
+        ids (function
+            | BulkDelivery.Resolved _ -> true
+            | BulkDelivery.Links _ | BulkDelivery.ByHand _ -> false)
+    )
+
+    Assert.Equal<string list>(
+        [ "BE"; "CL-SII"; "MD"; "US-FL" ],
         ids (function
             | BulkDelivery.ByHand _ -> true
-            | _ -> false)
+            | BulkDelivery.Links _ | BulkDelivery.Resolved _ -> false)
     )
 
 [<Fact>]
@@ -105,7 +112,7 @@ let ``a downloaded source loads as a registry, as of its download`` () : Task =
 
             match! cache.LoadAsync(serbiaEntry, ct) with
             | Ok registry ->
-                use _ = registry :?> IDisposable
+                use _ = registry
 
                 match! registry.TryFindAsync("17003313", Jurisdiction.ofCode "RS", ct) with
                 | Ok evidence ->
@@ -188,13 +195,15 @@ let ``a refused download fails without a stamp, and a by-hand source isn't fetch
             | other -> failwith $"%A{other}"
 
             Assert.Equal(BulkCacheState.NotDownloaded, cache.StateOf serbiaEntry)
-            let belgium = (BulkCatalogue.tryFind "BE").Value
-            Assert.Equal(BulkCacheState.ByHand, cache.StateOf belgium)
             let calls = handler.Calls.Length
 
-            match! cache.DownloadAsync(belgium, ValueNone, ct) with
-            | Error(RegistryFailure.InvalidRequest _) -> Assert.Equal(calls, handler.Calls.Length)
-            | other -> failwith $"%A{other}"
+            for pid in [ "BE"; "CL-SII" ] do
+                let byHand = (BulkCatalogue.tryFind pid).Value
+                Assert.Equal(BulkCacheState.ByHand, cache.StateOf byHand)
+
+                match! cache.DownloadAsync(byHand, ValueNone, ct) with
+                | Error(RegistryFailure.InvalidRequest _) -> Assert.Equal(calls, handler.Calls.Length)
+                | other -> failwith $"%A{other}"
         finally
             Directory.Delete(folder, true)
     }
@@ -247,7 +256,7 @@ let ``a load keeps an index, which the next load opens without reading the files
                     | Error failure -> return failwith (RegistryFailure.describe failure)
                 }
 
-            use _ = first :?> IDisposable
+            use _ = first
             let! company = serbiaCompany first
 
             match cache.IndexStateOf serbiaEntry with
@@ -264,7 +273,7 @@ let ``a load keeps an index, which the next load opens without reading the files
 
             match! cache.LoadAsync(serbiaEntry, ct) with
             | Ok second ->
-                use _ = second :?> IDisposable
+                use _ = second
                 let! again = serbiaCompany second
                 Assert.Equal(company, again)
             | Error failure -> failwith (RegistryFailure.describe failure)
@@ -298,7 +307,7 @@ let ``downloading again removes the index of the download before`` () : Task =
 
             match! cache.LoadAsync(serbiaEntry, ct) with
             | Ok registry ->
-                use _ = registry :?> IDisposable
+                use _ = registry
                 clock.Now <- clock.Now + TimeSpan.FromDays 1.
                 let! _ = cache.DownloadAsync(serbiaEntry, ValueNone, ct)
                 Assert.False(Directory.Exists(Path.Combine(folder, serbiaEntry.Id, "index")))
@@ -310,7 +319,7 @@ let ``downloading again removes the index of the download before`` () : Task =
 
             match! cache.LoadAsync(serbiaEntry, ct) with
             | Ok registry ->
-                use _ = registry :?> IDisposable
+                use _ = registry
                 let! evidence = registry.TryFindAsync("17003313", Jurisdiction.ofCode "RS", ct)
                 Assert.Equal(clock.Now, (Result.toOption evidence).Value.RetrievedAt)
             | Error failure -> failwith (RegistryFailure.describe failure)
@@ -335,7 +344,7 @@ let ``a second file that fails leaves the first file, the stamp and the index of
             let! first = cache.DownloadAsync(alaskaEntry, ValueNone, ct)
             Assert.True(Result.isOk first, $"%A{first}")
             let saved = Path.Combine(folder, alaskaEntry.Id)
-            let stamp = File.ReadAllText(Path.Combine(saved, "downloaded.txt"))
+            let! stamp = File.ReadAllTextAsync(Path.Combine(saved, "downloaded.txt"))
             let marker = Path.Combine(saved, "index", "marker")
             Directory.CreateDirectory(Path.GetDirectoryName marker) |> ignore
             File.WriteAllText(marker, "index")
@@ -545,7 +554,7 @@ let ``a fixed link's Last-Modified is the download's AsOf, kept with its stamp``
             for _ in 1..2 do
                 match! again.LoadAsync(brcko, ct) with
                 | Ok registry ->
-                    use _ = registry :?> IDisposable
+                    use _ = registry
 
                     match! registry.TryFindAsync("1-369", Jurisdiction.ofCode "BA-BRC", ct) with
                     | Ok evidence ->
@@ -557,6 +566,7 @@ let ``a fixed link's Last-Modified is the download's AsOf, kept with its stamp``
             Directory.Delete(folder, true)
     }
 
+let private librarysRegex = Text.RegularExpressions.Regex "\"library\": \"[^\"]*\",\\s*"
 [<Fact>]
 let ``an index another library version wrote, or that names none, is rebuilt`` () : Task =
     task {
@@ -574,22 +584,22 @@ let ``an index another library version wrote, or that names none, is rebuilt`` (
             let load () =
                 task {
                     match! cache.LoadAsync(serbiaEntry, ct) with
-                    | Ok registry -> (registry :?> IDisposable).Dispose()
+                    | Ok registry -> registry.Dispose()
                     | Error failure -> failwith (RegistryFailure.describe failure)
                 }
 
             do! load ()
             let manifest = Path.Combine(folder, serbiaEntry.Id, "index", "manifest.json")
-            let library = Text.RegularExpressions.Regex "\"library\": \"[^\"]*\",\\s*"
+            let library = librarysRegex
             Assert.Matches(library, File.ReadAllText manifest)
 
             for replacement in [ "\"library\": \"0.0.1-older\",\n  "; "" ] do
-                File.WriteAllText(manifest, library.Replace(File.ReadAllText manifest, replacement))
+                do! File.WriteAllTextAsync(manifest, library.Replace(File.ReadAllText manifest, replacement))
                 Assert.Equal(BulkIndexState.NotBuilt, cache.IndexStateOf serbiaEntry)
 
                 // An index of another version still opens: only LoadAsync's reuse depends on the version.
                 match! BulkIndexes.openAsync (Path.GetDirectoryName manifest) ct with
-                | Ok registry -> (registry :?> IDisposable).Dispose()
+                | Ok registry -> registry.Dispose()
                 | Error failure -> failwith (RegistryFailure.describe failure)
 
                 do! load ()

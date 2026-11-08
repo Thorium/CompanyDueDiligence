@@ -1154,7 +1154,7 @@ let ``a key longer than an index holds fails the save, not with an exception`` (
         let folder = freshFolder ()
 
         let long =
-            BulkRegistry(
+            new BulkRegistry(
                 contents.Coverage,
                 contents.Normal,
                 contents.InvalidNumber,

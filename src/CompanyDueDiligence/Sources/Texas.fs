@@ -25,7 +25,7 @@ module internal Texas =
             Owners = Support.NotOffered "The dataset lists no owners"
             Cost = AccessCost.Free
             RateLimit = RateLimitPolicy.NotPublished(2, TimeSpan.FromSeconds 1.)
-            Licence = "No licence stated in the dataset's metadata"
+            Licence = "None stated; the portal links only Tyler's terms"
         }
 
     /// The dataset holds taxpayers the Comptroller has set up, so a number missing from it can be any of many things.

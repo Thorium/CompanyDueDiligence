@@ -31,8 +31,7 @@ module internal NewYork =
             Owners = Support.NotOffered "The datasets list no owners"
             Cost = AccessCost.Free
             RateLimit = RateLimitPolicy.NotPublished(2, TimeSpan.FromSeconds 1.)
-            Licence =
-                "No licence stated in the datasets' metadata. Read without a key; a Socrata app token (X-App-Token) would raise the portal's limits"
+            Licence = "None stated; OPEN-NY terms: revocable licence, no attribution, a no-bots clause"
         }
 
     [<Literal>]
@@ -48,7 +47,7 @@ module internal NewYork =
         if numberRegex.IsMatch normal then
             match normal.TrimStart '0' with
             | "" -> ValueNone
-            | id -> ValueSome id
+            | pid -> ValueSome pid
         else
             ValueNone
 
@@ -498,9 +497,9 @@ type internal NewYorkRegistry(connection: SourceConnection) =
 
         member _.OfficersAsync(number: string, jurisdiction: Jurisdiction, ct: CancellationToken) =
             SourceAnswer.inCoverage coverage jurisdiction (fun () ->
-                offNumber number (fun id ->
+                offNumber number (fun pid ->
                     task {
-                        match! get (OpenData.socrataWhere active "dos_id" id 2) ct with
+                        match! get (OpenData.socrataWhere active "dos_id" pid 2) ct with
                         | Error failure -> return Error failure
                         | Ok reply ->
                             return

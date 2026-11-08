@@ -25,15 +25,15 @@ module internal Neutral =
             Officers = Support.Supported
             Owners =
                 Support.Partial
-                    "Exempt companies and those whose statements leave owners unidentified answer NotAvailable; a listing's Gaps say what it doesn't show"
+                    "The register of persons with significant control names those holding over 25% or control by other means, not every shareholder; exempt companies answer NotAvailable"
             Cost = AccessCost.FreeWithKey "An application of type \"API Key\" on the Companies House Developer Hub"
             RateLimit =
                 RateLimitPolicy.Published(
                     600,
                     TimeSpan.FromMinutes 5.,
-                    "The Companies House rate limiting guide; not run live"
+                    "The Companies House rate limiting guide; its X-Ratelimit headers were seen live on 2026-11-08"
                 )
-            Licence = "Not checked here: see the Companies House developer terms"
+            Licence = "No rules on use, per Companies House; bans for exceeding 600 per 5 minutes"
         }
 
     /// england-wales has no ISO 3166 code of its own, so it and anything not listed is the register's country.
@@ -375,7 +375,7 @@ module internal Neutral =
 
     let personSearch =
         Support.Partial
-            "The 50 officers the officer search ranks first, whose name holds every word asked, with the first 50 appointments of up to 20 of them; disqualified directors are a separate search, Api.DisqualifiedOfficers.searchAsync. Not run live"
+            "The 50 officers the officer search ranks first, whose name holds every word asked, with the first 50 appointments of up to 20 of them; disqualified directors are a separate search, Api.DisqualifiedOfficers.searchAsync. Run live on 2026-11-08"
 
     /// One appointment of an officer whose name matched.
     let personMatch (appointment: OfficerAppointment) : PersonMatch =
@@ -409,7 +409,15 @@ module internal Neutral =
         | TransportError e -> RegistryFailure.Unavailable e.Message
         | InvalidResponse answer -> RegistryFailure.UnreadableAnswer answer.Reason
 
-/// Companies House as an ICompanyRegistry. Charges, insolvency, filing history and documents are UK-only, so they stay on Api.
+namespace CompanyDueDiligence
+
+open System
+open System.Text.RegularExpressions
+open System.Threading
+open CompanyDueDiligence.CompaniesHouse
+
+/// Companies House as an ICompanyRegistry, with its filings, insolvency and documents as an IFilingRegister and its officers as an
+/// IPersonSearch. Make it with Sources.companiesHouse.
 [<Sealed>]
 type CompaniesHouseRegistry internal (client: CompaniesHouseClient, now: unit -> DateTimeOffset) =
 
@@ -421,6 +429,9 @@ type CompaniesHouseRegistry internal (client: CompaniesHouseClient, now: unit ->
 
     static let officersRead = 20
     static let appointmentPage = 50
+
+    /// How many found numbers a registry remembers before it starts over.
+    static let heldMost = 10000
 
     let answered raw value : Evidence<_> =
         {
@@ -442,7 +453,48 @@ type CompaniesHouseRegistry internal (client: CompaniesHouseClient, now: unit ->
         else
             Threading.Tasks.Task.FromResult(Error(RegistryFailure.OutsideCoverage jurisdiction))
 
-    new(client) = CompaniesHouseRegistry(client, (fun () -> DateTimeOffset.UtcNow))
+    /// Numbers whose profile this registry has read, so that unlessUnknown needn't ask again. Emptied past heldMost.
+    let held = Collections.Concurrent.ConcurrentDictionary<string, byte>()
+
+    let normal (number: string) =
+        if isNull number then
+            ""
+        else
+            number.Trim().ToUpperInvariant()
+
+    let remember (number: string) =
+        if held.Count >= heldMost then
+            held.Clear()
+
+        held[number] <- 0uy
+
+    /// An empty list, checked against the profile unless this registry has read it: Companies House answers an officer list or filing history
+    /// for a number it doesn't hold with an empty list, as it did on 2026-11-08. A failed check fails the answer.
+    let unlessUnknown
+        (number: string)
+        (isEmpty: 'T -> bool)
+        (ct: CancellationToken)
+        (answer: Result<Evidence<Availability<'T>>, RegistryFailure>)
+        =
+        task {
+            match answer with
+            | Ok({ Value = Available value } as evidence) when isEmpty value && not (held.ContainsKey(normal number)) ->
+                match! Api.Companies.getAsync client number ct with
+                | Ok(ValueSome read) ->
+                    remember read.CompanyNumber
+                    return answer
+                | Ok ValueNone ->
+                    return
+                        Ok
+                            { evidence with
+                                Raw = ValueNone
+                                Value = NotAvailable "Companies House holds no company with this number"
+                            }
+                | Error failure -> return Error(Neutral.failure (now ()) failure)
+            | _ -> return answer
+        }
+
+    internal new(client) = CompaniesHouseRegistry(client, (fun () -> DateTimeOffset.UtcNow))
 
     // The officer search, then the first page of appointments of each officer whose name matched, asked at once. A failed appointments call
     // fails the search; a 404 leaves that officer unread and the result incomplete.
@@ -529,11 +581,7 @@ type CompaniesHouseRegistry internal (client: CompaniesHouseClient, now: unit ->
                 task {
                     let! profile = Api.Companies.getAsync client number ct
 
-                    let asked =
-                        if isNull number then
-                            ""
-                        else
-                            number.Trim().ToUpperInvariant()
+                    let asked = normal number
 
                     return
                         profile
@@ -548,7 +596,10 @@ type CompaniesHouseRegistry internal (client: CompaniesHouseClient, now: unit ->
                                             Body = read.Raw
                                         }
                                 )
-                            | _ -> Ok answer)
+                            | ValueSome read ->
+                                remember read.CompanyNumber
+                                Ok answer
+                            | ValueNone -> Ok answer)
                         |> Result.map (fun answer ->
                             answered
                                 (answer |> ValueOption.map _.Raw)
@@ -587,7 +638,7 @@ type CompaniesHouseRegistry internal (client: CompaniesHouseClient, now: unit ->
                 task {
                     let! officers = Api.Officers.allAsync client number ct
 
-                    return
+                    return!
                         officers
                         |> Result.map (fun answer ->
                             match answer with
@@ -597,6 +648,7 @@ type CompaniesHouseRegistry internal (client: CompaniesHouseClient, now: unit ->
                                     (Available(officers |> List.map Neutral.officer))
                             | ValueNone -> answered ValueNone (NotAvailable "No officer list is held for this number"))
                         |> Result.mapError (Neutral.failure (now ()))
+                        |> unlessUnknown number List.isEmpty ct
                 })
 
         member _.OwnersAsync(number: string, jurisdiction: Jurisdiction, _: OwnerPurpose, ct: CancellationToken) =
@@ -620,21 +672,28 @@ type CompaniesHouseRegistry internal (client: CompaniesHouseClient, now: unit ->
                 })
 
     interface IFilingRegister with
-        member _.Register = Neutral.source
-        member _.Jurisdictions = Neutral.coverage.Jurisdictions
+        member _.Coverage = Neutral.coverage
 
         member _.FilingsAsync(number: string, ct: CancellationToken) =
             task {
-                let! filings = Api.FilingHistory.allAsync client number [] ct
+                let! filings = Api.FilingHistory.recentAsync client number [] ct
 
-                return
+                return!
                     filings
                     |> Result.map (fun answer ->
                         match answer with
-                        | ValueSome items ->
-                            answered (rawList (items |> List.map _.Raw)) (Available(items |> List.map Neutral.filing))
+                        | ValueSome(items, total, complete) ->
+                            answered
+                                (rawList (items |> List.map _.Raw))
+                                (Available
+                                    {
+                                        Filings = items |> List.map Neutral.filing
+                                        Total = ValueSome total
+                                        Complete = complete
+                                    })
                         | ValueNone -> answered ValueNone (NotAvailable "No filing history is held for this number"))
                     |> Result.mapError (Neutral.failure (now ()))
+                    |> unlessUnknown number (fun history -> history.Filings.IsEmpty) ct
             }
 
         member _.InsolvencyAsync(number: string, ct: CancellationToken) =
@@ -686,7 +745,7 @@ type CompaniesHouseRegistry internal (client: CompaniesHouseClient, now: unit ->
                     |> Result.map (
                         ValueOption.map (fun file ->
                             {
-                                ContentType = file.ContentType
+                                DocumentFile.ContentType = file.ContentType
                                 Content = file.Content
                             })
                     )

@@ -23,13 +23,33 @@ type CaseSources =
         /// Registers' filings, establishments and insolvency records.
         Filings: IFilingRegister list
         /// GLEIF, as a cross-check. ValueNone leaves it out and says so in a gap.
-        CrossCheck: GleifCrossCheck voption
+        CrossCheck: ILeiCrossCheck voption
         /// Routes for jurisdictions no register here reads. CoverageRoutes.all is the set this package declares.
         Routes: CoverageRoute list
         /// Address lists the host holds, such as virtual office providers.
         KnownAddresses: KnownAddressList list
     }
 
+/// Building case sources.
+module CaseSources =
+
+    /// Sources of these registers: the filing registers among them as Filings, CoverageRoutes.all, and no cross-check or address lists. Add the
+    /// rest with { CaseSources.ofRegistries ... with ... }, so that a field added later breaks no host.
+    let ofRegistries (registries: ICompanyRegistry list) : CaseSources =
+        {
+            Registries = registries
+            Filings =
+                registries
+                |> List.choose (fun registry ->
+                    match registry with
+                    | :? IFilingRegister as filings -> Some filings
+                    | _ -> None)
+            CrossCheck = ValueNone
+            Routes = CoverageRoutes.all
+            KnownAddresses = []
+        }
+
+/// How far an investigation reads and how it judges what it reads.
 type InvestigationOptions =
     {
         /// How many links from the start to follow. A choice made without data.
@@ -37,15 +57,18 @@ type InvestigationOptions =
         /// How many company records to read in one run. A choice made without data.
         MaxEntities: int
         Purpose: OwnerPurpose
-        /// A filing's capital below this figure, in any currency, shows as a nominal capital flag. A choice made without data: set your own.
+        /// A filing's capital at or below this figure, in any currency, shows as a nominal capital flag. A choice made without data: set your own.
         NominalCapitalAtMost: decimal
         /// The fewest entries a list may hold when a case is screened. ListMinimums.defaults says where its figures come from.
         ListMinimums: ListMinimums
         Now: unit -> DateTimeOffset
     }
 
+/// Options to start from.
 module InvestigationOptions =
 
+    /// Four links deep, at most 25 company records, owners read for customer due diligence, nominal capital at 100, ListMinimums.defaults and
+    /// the system clock in UTC. Set your own with { InvestigationOptions.defaults with ... }.
     let defaults =
         {
             MaxDepth = 4
@@ -65,6 +88,18 @@ type CaseStart =
         /// The name as the customer gave it, shown until a register answers.
         NameGiven: string
     }
+
+/// Building case starts.
+module CaseStart =
+
+    /// A case start; add what a later version adds with { CaseStart.create ... with ... }.
+    let create (caseId: string) (number: string) (jurisdiction: Jurisdiction) (nameGiven: string) : CaseStart =
+        {
+            CaseId = caseId
+            Number = number
+            Jurisdiction = jurisdiction
+            NameGiven = nameGiven
+        }
 
 /// Registers' answers as facts and flags.
 module internal Reading =
@@ -103,10 +138,18 @@ module internal Reading =
         | CompanyStanding.Unknown(ValueSome word) -> word
         | CompanyStanding.Unknown ValueNone -> "no status given"
 
-    /// True when two numbers are one after NameMatching.normalise, with spaces and leading zeros taken out, as Discrepancies compares them.
+    /// True when two numbers are one after NameMatch.normalise, with spaces and leading zeros taken out, as Discrepancies compares them.
+    /// A number holds a digit and isn't all zeros: "N/A", "NONE" or "0" in a number field is no number. SF000939 on Companies House states
+    /// registration_number "N/A".
+    let isNumber (number: string) =
+        not (isNull number)
+        && number |> Seq.exists Char.IsDigit
+        && number |> Seq.exists (fun c -> Char.IsLetterOrDigit c && c <> '0')
+
+    let private sameNumberRegex = Regex @"\s+"
     let sameNumber (a: string) (b: string) =
         let key (number: string) =
-            Regex.Replace(NameMatching.normalise number, @"\s+", "").TrimStart '0'
+            sameNumberRegex.Replace(NameMatching.normalise number, "").TrimStart '0'
 
         key a = key b
 
@@ -223,10 +266,12 @@ module internal Reading =
         | OwnershipGap.StatementNotUnderstood code -> $"A statement this library doesn't recognise: {code}"
 
     /// The category a filing goes under. Category words are the register's own, and forms not placed here stay Other.
+    /// Capital filings aren't constitutional: a listed company files hundreds of allotments, buy-backs and cancellations (824 of Tesco PLC's
+    /// newest 1,000 filings on 2026-11-08). Their figures are read as facts either way.
     let documentKind (category: string voption) =
         match category with
         | ValueSome("insolvency" | "liquidation" | "administration" | "receivership") -> DocumentKind.Insolvency
-        | ValueSome("incorporation" | "resolution" | "capital" | "change-of-constitution" | "constitution" | "overseas" | "reregistration") ->
+        | ValueSome("incorporation" | "resolution" | "change-of-constitution" | "constitution" | "overseas" | "reregistration") ->
             DocumentKind.Constitutional
         | other -> DocumentKind.Other other
 
@@ -411,6 +456,11 @@ module Investigation =
         (note: string voption)
         (case: CaseFile)
         =
+        let entity =
+            { entity with
+                RegistrationNumber = entity.RegistrationNumber |> ValueOption.filter Reading.isNumber
+            }
+
         let holdsUp = $"{CaseLink.describeKind kind} {name}"
 
         // What the pointing record says of the far record, which can then be set against what the far record says of itself.
@@ -486,8 +536,12 @@ module Investigation =
                 }
             ]
         | ValueSome number, _ when number.Trim() <> "" ->
-            let updated, key =
-                toEntity (EntityIdentity.NameOnly(name, $"{register}: number {number}")) ValueNone
+            let numbered =
+                match entity.Register with
+                | ValueSome far when not (String.IsNullOrWhiteSpace far) -> $"{far}: number {number}"
+                | _ -> $"number {number}, as stated by {register}"
+
+            let updated, key = toEntity (EntityIdentity.NameOnly(name, numbered)) ValueNone
 
             updated
             |> CaseFile.addGap
@@ -825,7 +879,7 @@ module Investigation =
     let private filingRegisterFor (sources: CaseSources) (jurisdiction: Jurisdiction) =
         sources.Filings
         |> List.tryFind (fun register ->
-            register.Jurisdictions
+            register.Coverage.Jurisdictions
             |> List.exists (fun scope -> Jurisdiction.covers scope jurisdiction))
 
     /// Filings surfaced as documents, with their capital figures as facts.
@@ -866,7 +920,27 @@ module Investigation =
                             "filings"
                             entitlement.Who
                             entitlement.Route
-                | Available filings ->
+                | Available history ->
+                    let filings = history.Filings
+
+                    let case =
+                        if history.Complete then
+                            case
+                        else
+                            let total =
+                                history.Total
+                                |> ValueOption.map (fun total -> $" of {total}")
+                                |> ValueOption.defaultValue ""
+
+                            case
+                            |> CaseFile.addGap
+                                (ValueSome pending.Key)
+                                GapReach.ThisEntity
+                                GapKind.NotChecked
+                                "older filings"
+                                $"The newest {filings.Length}{total} filings were read"
+                                "A person reading the rest of the register's filing history"
+
                     let capital =
                         filings
                         |> List.collect (fun filing -> filing.Capital |> List.map (fun figure -> filing, figure))
@@ -896,7 +970,7 @@ module Investigation =
                                     {
                                         Id = documentId
                                         Entity = pending.Key
-                                        Register = register.Register
+                                        Register = register.Coverage.Registry
                                         DocumentId = filing.DocumentId
                                         TransactionId = filing.TransactionId
                                         Kind = Reading.documentKind filing.Category
@@ -1037,7 +1111,7 @@ module Investigation =
                             (fun ((state: CaseFile), more) establishment ->
                                 let identity =
                                     EntityIdentity.OnRegister(
-                                        register.Register,
+                                        register.Coverage.Registry,
                                         pending.Jurisdiction,
                                         establishment.Number
                                     )
@@ -1054,7 +1128,7 @@ module Investigation =
                                 |> CaseFile.addLink
                                     pending.Key
                                     target.Key
-                                    LinkKind.UkEstablishment
+                                    LinkKind.Establishment
                                     (LinkProvenance.Register answer.Source)
                                     [ pid ]
                                     ValueNone,
@@ -1110,12 +1184,32 @@ module Investigation =
         ]
 
     /// The LEI record for a company, if it has one, with its parents: a parent is linked and followed, and a reporting exception shown as a gap.
-    let private readCrossCheck (check: GleifCrossCheck) (pending: Pending) (case: CaseFile) ct =
+    /// GLEIF is asked with the number as asked, then, when nothing reports it, as the register wrote it (alsoAs). An answer holding no record is
+    /// kept as evidence.
+    let private readCrossCheck (check: ILeiCrossCheck) (pending: Pending) (alsoAs: string voption) (case: CaseFile) ct =
         let about = ValueSome pending.Key
         let subject = "LEI cross-check"
 
+        let nothingFound (answer: Evidence<LeiMatches>) =
+            answer.Value.Matching.IsEmpty
+            && answer.Value.Possible.IsEmpty
+            && answer.Value.Unread = 0
+
+        let ask () =
+            task {
+                match! guarded ct (fun () -> check.ByRegistrationAsync(pending.Number, pending.Jurisdiction, ct)) with
+                | Ok first when nothingFound first ->
+                    match alsoAs with
+                    | ValueSome written ->
+                        match! guarded ct (fun () -> check.ByRegistrationAsync(written, pending.Jurisdiction, ct)) with
+                        | Ok second when not (nothingFound second) -> return Ok second
+                        | _ -> return Ok first
+                    | ValueNone -> return Ok first
+                | other -> return other
+            }
+
         task {
-            match! guarded ct (fun () -> check.ByRegistrationAsync(pending.Number, pending.Jurisdiction, ct)) with
+            match! ask () with
             | Error failure ->
                 let detail, wouldClose = Reading.failureGap failure
 
@@ -1154,6 +1248,18 @@ module Investigation =
                         case
 
                 match answer.Value.Matching with
+                | [] when nothingFound answer ->
+                    let withEvidence, _ =
+                        record
+                            pending.Key
+                            "LEI record"
+                            EvidenceOrigin.CrossCheck
+                            answer
+                            []
+                            (ValueSome "GLEIF holds no LEI record reporting this number in this jurisdiction")
+                            case
+
+                    return withEvidence, []
                 | [] -> return case, []
                 | [ _ ] when answer.Value.Unread > 0 -> return case, []
                 | _ :: _ :: _ ->
@@ -1332,10 +1438,24 @@ module Investigation =
         DateOnly.FromDateTime((options.Now(): DateTimeOffset).UtcDateTime)
 
     /// A gap for an answer whose data is older than today: what changed since isn't seen.
-    let private dataDateGap options about (answer: Evidence<'T>) (case: CaseFile) =
+    /// True for an answer read from a downloaded file that states no date of its own: its RetrievedAt is when the file was downloaded, which
+    /// says nothing of when its data was current.
+    let private undatedFile (registry: ICompanyRegistry) (answer: Evidence<'T>) =
+        answer.AsOf.IsNone && (registry :? IBulkContents || registry :? IndexedRegistry)
+
+    let private dataDateGap options (registry: ICompanyRegistry) about (answer: Evidence<'T>) (case: CaseFile) =
         let asOf = Reading.dataDate answer.AsOf answer.RetrievedAt
 
-        if asOf < today options then
+        if undatedFile registry answer then
+            case
+            |> CaseFile.addGap
+                about
+                GapReach.ThisEntity
+                GapKind.NotChecked
+                "data date"
+                $"{answer.Source}: the file states no date of its own, and was downloaded on {Reading.dateText asOf}; changes since the publisher made it aren't seen"
+                "A later copy of the source, the register itself, or a vendor's report"
+        elif asOf < today options then
             case
             |> CaseFile.addGap
                 about
@@ -1348,8 +1468,21 @@ module Investigation =
             case
 
     /// A register saying it holds no such number, as a flag dated by its data. Data older than today may predate the company, which is a gap.
-    let private notHeld options (pending: Pending) (answer: Evidence<'T>) (case: CaseFile) =
+    let private notHeld
+        options
+        (registry: ICompanyRegistry)
+        (pending: Pending)
+        (answer: Evidence<'T>)
+        (case: CaseFile)
+        =
         let asOf = Reading.dataDate answer.AsOf answer.RetrievedAt
+        let undated = undatedFile registry answer
+
+        let dated =
+            if undated then
+                $"in its file downloaded on {Reading.dateText asOf}, which states no date of its own"
+            else
+                $"in its data as of {Reading.dateText asOf}"
 
         let withEvidence, pid =
             record
@@ -1366,18 +1499,21 @@ module Investigation =
             |> CaseFile.addFlag
                 pending.Key
                 FlagKind.NotOnRegister
-                $"{answer.Source} says it holds no number {pending.Number}, in its data as of {Reading.dateText asOf}"
+                $"{answer.Source} says it holds no number {pending.Number}, {dated}"
                 answer.Source
                 [ pid ]
 
-        if asOf < today options then
+        if undated || asOf < today options then
             flagged
             |> CaseFile.addGap
                 (ValueSome pending.Key)
                 GapReach.WholeCase
                 GapKind.NotChecked
                 "data date"
-                $"{answer.Source}'s data is as of {Reading.dateText asOf}, so a company formed since isn't in it"
+                (if undated then
+                     $"{answer.Source}'s file states no date of its own, so a company formed since it was made may not be in it"
+                 else
+                     $"{answer.Source}'s data is as of {Reading.dateText asOf}, so a company formed since isn't in it")
                 "A later copy of the source, the register itself, or a vendor's report"
         else
             flagged
@@ -1414,9 +1550,9 @@ module Investigation =
                 "A person reading that register, a vendor's report, or an adapter for it"
 
     /// The LEI cross-check, or a gap saying it wasn't among the sources.
-    let private crossCheck (sources: CaseSources) (pending: Pending) (case: CaseFile) ct =
+    let private crossCheck (sources: CaseSources) (pending: Pending) (alsoAs: string voption) (case: CaseFile) ct =
         match sources.CrossCheck with
-        | ValueSome check -> readCrossCheck check pending case ct
+        | ValueSome check -> readCrossCheck check pending alsoAs case ct
         | ValueNone when pending.Depth = 0 ->
             Task.FromResult(
                 case
@@ -1448,7 +1584,7 @@ module Investigation =
                 $"company record: {pending.Via}"
                 $"{registry.Coverage.Registry}: {detail}"
                 wouldClose
-        | Ok({ Evidence.Value = Available ValueNone } as answer) -> notHeld options pending answer case
+        | Ok({ Evidence.Value = Available ValueNone } as answer) -> notHeld options registry pending answer case
         | Ok({
                  Evidence.Value = Available(ValueSome _)
              }) -> case
@@ -1489,7 +1625,7 @@ module Investigation =
                 $"record on {registry.Coverage.Registry}"
                 detail
                 wouldClose
-        | Ok({ Evidence.Value = Available ValueNone } as answer) -> notHeld options pending answer case
+        | Ok({ Evidence.Value = Available ValueNone } as answer) -> notHeld options registry pending answer case
         | Ok({
                  Evidence.Value = Available(ValueSome company)
              } as answer) ->
@@ -1515,7 +1651,7 @@ module Investigation =
                     let kind, statement = Reading.concernFlag concern
                     state |> CaseFile.addFlag pending.Key kind statement answer.Source [ id ])
                 withStanding
-            |> dataDateGap options about answer
+            |> dataDateGap options registry about answer
         | Ok answer ->
             fst (
                 record
@@ -1585,10 +1721,10 @@ module Investigation =
             match answered, found with
             | [], _ ->
                 let unread = unreadGap sources pending registries case
-                return! crossCheck sources pending unread ct
+                return! crossCheck sources pending ValueNone unread ct
             | _, None ->
                 let unread = answered |> List.fold (unsettled options pending) case
-                return! crossCheck sources pending unread ct
+                return! crossCheck sources pending ValueNone unread ct
             | _, Some(registry, answer, company) ->
                 let registerName = answer.Source
 
@@ -1686,6 +1822,8 @@ module Investigation =
                 let withUnconfirmed =
                     match company.Concerns.Unconfirmed with
                     | [] -> withConcerns
+                    // An establishment's flags are its overseas company's, which the case follows: read there, or a gap past the limits.
+                    | _ when company.Role = RecordRole.Establishment && company.EstablishmentOf.IsSome -> withConcerns
                     | unconfirmed ->
                         let kind =
                             match registry.Coverage.Concerns with
@@ -1719,7 +1857,7 @@ module Investigation =
                 let withOthers =
                     withAddressGap
                     |> partialGaps about registry.Coverage company
-                    |> dataDateGap options about answer
+                    |> dataDateGap options registry about answer
                     |> fun state ->
                         answered
                         |> List.filter (fun (other, _) -> not (obj.ReferenceEquals(other, registry)))
@@ -1782,7 +1920,7 @@ module Investigation =
                         |> CaseFile.addLink
                             parent.Key
                             pending.Key
-                            LinkKind.UkEstablishment
+                            LinkKind.Establishment
                             (LinkProvenance.Register answer.Source)
                             [ id ]
                             ValueNone,
@@ -1835,7 +1973,17 @@ module Investigation =
                     | _ -> Task.FromResult(withInsolvency, [])
 
                 let! withCrossCheck, crossCheckNext =
-                    crossCheck sources pending withEstablishments ct
+                    // The register's own writing of the same number, such as CHE-107.721.785 for CHE107721785.
+                    let alsoAs =
+                        if
+                            company.Number <> pending.Number
+                            && Reading.sameNumber company.Number pending.Number
+                        then
+                            ValueSome company.Number
+                        else
+                            ValueNone
+
+                    crossCheck sources pending alsoAs withEstablishments ct
 
                 return withCrossCheck, homeNext @ parentNext @ ownerNext @ establishmentNext @ crossCheckNext
         }

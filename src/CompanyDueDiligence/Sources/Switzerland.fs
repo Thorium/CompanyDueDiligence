@@ -33,8 +33,7 @@ module internal Switzerland =
                     TimeSpan.FromMinutes 1.,
                     "BFS: the public services are limited to 20 requests a minute, and a caller over it is blocked for a while"
                 )
-            Licence =
-                "None stated in the service, its WSDL or the BFS specification; OPEN-BY (open use, source named) is unverified"
+            Licence = "None stated; Public Services are for unregistered users. OPEN-BY covers the BFS spec only"
         }
 
     [<Literal>]

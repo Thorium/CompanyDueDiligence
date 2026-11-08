@@ -32,7 +32,7 @@ module internal OpenData =
             $"{word[0]}%%{word.Substring 1}"
 
     /// A SoQL or ArcGIS SQL condition that column, an expression holding the name in upper case, can match the name as asked; like is the
-    /// dialect's spelling of LIKE. Every mode asks for NameMatching.normalise's words in order, each as looseWord, with anything before, between
+    /// dialect's spelling of LIKE. Every mode asks for NameMatch.normalise's words in order, each as looseWord, with anything before, between
     /// and after them; Exact also asks for the whole name in upper case. The rows, which keepExact narrows by NameMatch.matcher, hold every name
     /// matching in that mode that differs only in case, separators, and full stops or apostrophes where looseWord takes them; accents are
     /// compared as held. A name with no letter or digit asks for the term as likeTerm leaves it.

@@ -28,7 +28,7 @@ module internal Brazil =
             Owners = Support.Partial "Partners in the QSA, current ones only, with no shares"
             Cost = AccessCost.Free
             RateLimit = RateLimitPolicy.NotPublished(1, TimeSpan.FromDays 1.)
-            Licence = "Unverified: no licence found on the file share"
+            Licence = "Unverified: dados.gov.br couldn't be read"
         }
 
     let private naturezas =
@@ -824,7 +824,7 @@ module internal Brazil =
         |> Array.filter (fun record -> record.Company.Role <> RecordRole.Establishment)
         |> Array.iter (fun record -> index.Add(record.Company.Number.Substring(0, 8), record))
 
-        BulkRegistry(
+        new BulkRegistry(
             coverage,
             normalCnpj,
             invalidNumber,

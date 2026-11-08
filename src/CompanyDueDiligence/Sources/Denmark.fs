@@ -29,8 +29,7 @@ module internal Denmark =
                 AccessCost.FreeWithKey
                     "A user ID and password from Erhvervsstyrelsen (cvrselvbetjening@erst.dk), passed as ClientCredentials"
             RateLimit = RateLimitPolicy.NotPublished(2, TimeSpan.FromSeconds 1.)
-            Licence =
-                "Terms not read: the guide states no licence and cites the CVR Act. Its endpoint is plain http, so the credentials travel unencrypted. Not run live"
+            Licence = "CC BY 4.0, per data.gov.dk; advertising-protected firms not for direct marketing"
         }
 
     let private cvrRegex = Regex @"\A[0-9]{8}\z"

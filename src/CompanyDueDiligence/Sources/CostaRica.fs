@@ -31,7 +31,7 @@ module internal CostaRica =
                     TimeSpan.FromSeconds 1.,
                     "api.hacienda.go.cr/docs: 10 a second sustained over 120 seconds and 20 a second in 5-second bursts, past which the IP is blocked for 10 minutes; paced at 2 a second"
                 )
-            Licence = "No licence stated in the API's documentation"
+            Licence = "None found; the docs answered 403 on 2026-11-08"
         }
 
     /// A 404 says Hacienda holds no taxpayer with this number, which says nothing of the Registro Nacional.

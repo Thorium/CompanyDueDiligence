@@ -79,10 +79,10 @@ type PeopleFound =
 type Route =
     /// #/company/<code>/<number>
     | CompanyRoute of code: string * number: string
-    /// #/search/<term>, with ?match=exact or ?match=contains when not the default starts-with.
-    | SearchRoute of term: string * matching: NameMatch
-    /// #/person/<name>
-    | PersonRoute of name: string
+    /// #/search/<term>, with ?match=exact or ?match=contains when not the default starts-with, and ?register=<code> for one register.
+    | SearchRoute of term: string * matching: NameMatch * register: string voption
+    /// #/person/<name>, with ?register=<code> for one register.
+    | PersonRoute of name: string * register: string voption
     /// No hash.
     | NoRoute
     /// A hash of no shape above.
@@ -106,37 +106,60 @@ module Route =
 
     /// The route a hash names. Each part is URL-decoded after splitting, so a number holding a slash travels encoded.
     let parse (hash: string) =
-        let whole = (if isNull hash then "" else hash).TrimStart('#').TrimStart('/')
+        let whole = (if isNull hash then "" else hash).TrimStart('#').TrimStart '/'
 
         let path, query =
             match whole.IndexOf '?' with
             | -1 -> whole, ""
             | at -> whole.Substring(0, at), whole.Substring(at + 1)
 
-        let matching =
+        let param (name: string) =
             query.Split('&', StringSplitOptions.RemoveEmptyEntries)
             |> Array.tryPick (fun pair ->
                 match pair.Split('=', 2) with
-                | [| "match"; value |] -> Some(Uri.UnescapeDataString value)
+                | [| key; value |] when key = name -> Some(Uri.UnescapeDataString value)
                 | _ -> None)
-            |> Option.map matchOf
-            |> Option.defaultValue NameMatch.StartsWith
+
+        let matching =
+            param "match" |> Option.map matchOf |> Option.defaultValue NameMatch.StartsWith
+
+        let register =
+            match param "register" with
+            | Some code when code.Trim() <> "" -> ValueSome(code.Trim().ToUpperInvariant())
+            | _ -> ValueNone
 
         match path.Split('/') |> Array.map Uri.UnescapeDataString with
         | [| "" |] -> NoRoute
         | [| "company"; code; number |] when code <> "" && number <> "" -> CompanyRoute(code.ToUpperInvariant(), number)
-        | [| "search"; term |] when term <> "" -> SearchRoute(term, matching)
-        | [| "person"; name |] when name <> "" -> PersonRoute name
+        | [| "search"; term |] when term <> "" -> SearchRoute(term, matching, register)
+        | [| "person"; name |] when name <> "" -> PersonRoute(name, register)
         | _ -> UnknownRoute hash
+
+    /// The query a link carries, from its pairs; none when there are none.
+    let private queryOf (pairs: (string * string) list) =
+        match pairs with
+        | [] -> ""
+        | _ ->
+            "?"
+            + (pairs
+               |> List.map (fun (key, value) -> $"{key}={Uri.EscapeDataString value}")
+               |> String.concat "&")
+
+    let private registerPair (register: string voption) =
+        register |> ValueOption.map (fun code -> "register", code) |> ValueOption.toList
 
     let hash route =
         match route with
         | CompanyRoute(code, number) -> $"#/company/{Uri.EscapeDataString code}/{Uri.EscapeDataString number}"
-        | SearchRoute(term, matching) ->
-            match matchWord matching with
-            | ValueSome word -> $"#/search/{Uri.EscapeDataString term}?match={word}"
-            | ValueNone -> $"#/search/{Uri.EscapeDataString term}"
-        | PersonRoute name -> $"#/person/{Uri.EscapeDataString name}"
+        | SearchRoute(term, matching, register) ->
+            let pairs =
+                (matchWord matching
+                 |> ValueOption.map (fun word -> "match", word)
+                 |> ValueOption.toList)
+                @ registerPair register
+
+            $"#/search/{Uri.EscapeDataString term}" + queryOf pairs
+        | PersonRoute(name, register) -> $"#/person/{Uri.EscapeDataString name}" + queryOf (registerPair register)
         | NoRoute -> ""
         | UnknownRoute hash -> hash
 
@@ -152,7 +175,8 @@ type Model =
         Mode: Mode
         Code: string
         Number: string
-        PickerOpen: bool
+        /// The register picker open now: "lookup", "companies" or "people".
+        OpenPicker: string voption
         Busy: bool
         Review: ReviewItemDto list
         Export: string voption
@@ -166,7 +190,8 @@ type Model =
         /// The result blocks showing every match, keyed by card and register code, such as "people:FR".
         ShowingAll: Set<string>
         /// The registers each search card leaves out, keyed by card, "companies" or "people". Every switched-on register is asked unless left out here.
-        LeftOut: Map<string, Set<string>>
+        /// The one register a search card asks, by card; a card not here asks all.
+        Chosen: Map<string, string>
         /// The Companies House JavaScript key kept in this browser, which is never shown. Browser mode only.
         CompaniesHouseKey: string voption
         /// What the key field holds before Save.
@@ -206,8 +231,9 @@ type Model =
 type Message =
     | Go of Page
     | ModeRead of server: bool
-    | TogglePicker
+    | TogglePicker of picker: string
     | Pick of code: string
+    | Choose of card: string * code: string voption
     | SetNumber of string
     | OpenCase
     | CaseOpened of CaseDto
@@ -220,12 +246,10 @@ type Message =
     | SearchPeople
     | PeopleSearched of PeopleFound
     | ToggleShowAll of key: string
-    | ToggleChip of card: string * code: string
     | FollowLink of hash: string
     | CopyLink of key: string * hash: string
     | LinkCopied of key: string * copied: bool
     | ClearCopied of key: string
-    | ToggleAllChips of card: string
     | LookUp of code: string * number: string
     | Switch of code: string * on: bool
     | EnabledRead of stored: string * companiesHouseKey: string
@@ -307,15 +331,8 @@ let companiesHouseFor =
         match made.TryGetValue key with
         | true, registry -> registry
         | _ ->
-            let client =
-                CompaniesHouse.CompaniesHouseClient.create
-                    {
-                        CompaniesHouse.Credentials.ApiKey = key
-                    }
-                    CompaniesHouse.Endpoints.live
-                    (new HttpClientHandler())
-
-            let registry = CompaniesHouse.CompaniesHouseRegistry(client) :> ICompanyRegistry
+            let registry =
+                Sources.companiesHouse connection.Value (SourceKey key) :> ICompanyRegistry
             made[key] <- registry
             registry
 
@@ -372,10 +389,10 @@ let saveSwitches (js: IJSRuntime) (model: Model) =
         ()
         Failed
 
-let leftOut (model: Model) (card: string) =
-    model.LeftOut |> Map.tryFind card |> Option.defaultValue Set.empty
+/// The one register a search card asks, if one is picked.
+let chosenFor (model: Model) (card: string) = model.Chosen |> Map.tryFind card
 
-/// The switched-on registers a search card offers as chips: those that search people for the person search; for the name search every one in
+/// The switched-on registers a search card offers in its picker: those that search people for the person search; for the name search every one in
 /// the browser, and those that search names on the server.
 let chipSources (model: Model) (card: string) =
     match card, model.Mode with
@@ -383,15 +400,23 @@ let chipSources (model: Model) (card: string) =
     | _, OnServer -> enabledSources model |> List.filter _.SearchesCompanies
     | _ -> enabledSources model
 
-/// The switched-on registers a search card asks: those whose chip is selected, and for the person search also those that can't search people,
-/// which its answer lists by code.
+/// The switched-on registers a search card asks: the one picked while it is offered, else all, and for the person search with all also those
+/// that can't search people, which its answer lists by code.
 let selectedSources (model: Model) (card: string) =
-    let off = leftOut model card
+    let offered = chipSources model card
 
-    match card with
-    | "people" -> enabledSources model
-    | _ -> chipSources model card
-    |> List.filter (fun source -> not (off.Contains source.Code))
+    match
+        chosenFor model card
+        |> Option.bind (fun code -> offered |> List.tryFind (fun source -> source.Code = code))
+    with
+    | Some one -> [ one ]
+    | None when card = "people" -> enabledSources model
+    | None -> offered
+
+/// The register a search card shows picked: the one chosen while it is offered, else none for all.
+let pickedFor (model: Model) (card: string) =
+    chosenFor model card
+    |> Option.bind (fun code -> chipSources model card |> List.tryFind (fun source -> source.Code = code))
 
 let sourceOf (model: Model) (code: string) =
     registersOf model |> List.tryFind (fun source -> source.Code = code)
@@ -663,7 +688,7 @@ let running (items: BulkDto list) =
 /// The paths typed for a slot: one per line for a slot taking several, each without the quotes a copied path carries.
 let pathsOf (text: string) =
     (if isNull text then "" else text).Split([| '\r'; '\n' |], StringSplitOptions.RemoveEmptyEntries)
-    |> Array.map (fun path -> path.Trim().Trim('"'))
+    |> Array.map (fun path -> path.Trim().Trim '"')
     |> Array.filter (fun path -> path <> "")
 
 /// A row's register as listed now, or one named by its code alone.
@@ -684,10 +709,17 @@ let registerFor (registers: RegisterDto list) (code: string) =
         }
 
 /// The exception a task's failure wraps, whose message is the one to show.
+[<TailCall>]
 let rec innermost (error: exn) =
     match error with
     | :? AggregateException as wrapped when wrapped.InnerExceptions.Count = 1 -> innermost wrapped.InnerExceptions[0]
     | error -> error
+
+/// The cards' choices with a link's register, or none for all, set for the card.
+let choosing (model: Model) (card: string) (register: string voption) =
+    match register with
+    | ValueSome code -> model.Chosen.Add(card, code)
+    | ValueNone -> model.Chosen.Remove card
 
 let init (js: IJSRuntime) (http: HttpClient) =
     {
@@ -695,7 +727,7 @@ let init (js: IJSRuntime) (http: HttpClient) =
         Mode = Detecting
         Code = "NO"
         Number = ""
-        PickerOpen = false
+        OpenPicker = ValueNone
         Busy = false
         Review = []
         Export = ValueNone
@@ -708,7 +740,7 @@ let init (js: IJSRuntime) (http: HttpClient) =
         SearchingPeople = false
         People = ValueNone
         ShowingAll = Set.empty
-        LeftOut = Map.empty
+        Chosen = Map.empty
         CompaniesHouseKey = ValueNone
         KeyDraft = ""
         CaseLink = ValueNone
@@ -741,23 +773,33 @@ let update (js: IJSRuntime) (http: HttpClient) message (model: Model) =
     | Go page ->
         { model with
             Page = page
-            PickerOpen = false
+            OpenPicker = ValueNone
         },
         Cmd.none
     | ModeRead true -> { model with Mode = OnServer }, Cmd.batch [ readServer js http; loadKeys http; loadBulk http ]
     | ModeRead false -> { model with Mode = InBrowser }, readEnabled js
-    | TogglePicker ->
+    | TogglePicker picker ->
         { model with
-            PickerOpen = not model.PickerOpen
+            OpenPicker =
+                if model.OpenPicker = ValueSome picker then
+                    ValueNone
+                else
+                    ValueSome picker
         },
         Cmd.none
     | Pick code ->
-        let example = sourceOf model code |> Option.map _.Example |> Option.defaultValue ""
-
         { model with
             Code = code
-            Number = example
-            PickerOpen = false
+            OpenPicker = ValueNone
+        },
+        Cmd.none
+    | Choose(card, code) ->
+        { model with
+            Chosen =
+                match code with
+                | ValueSome code -> model.Chosen.Add(card, code)
+                | ValueNone -> model.Chosen.Remove card
+            OpenPicker = ValueNone
         },
         Cmd.none
     | SetNumber number -> { model with Number = number }, Cmd.none
@@ -770,7 +812,7 @@ let update (js: IJSRuntime) (http: HttpClient) message (model: Model) =
             Error = ValueNone
             Export = ValueNone
             Review = []
-            PickerOpen = false
+            OpenPicker = ValueNone
             CaseLink = ValueSome(Route.hash route)
             OffNote =
                 if isOn model model.Code then
@@ -806,7 +848,13 @@ let update (js: IJSRuntime) (http: HttpClient) message (model: Model) =
     | SetMatching matching -> { model with Matching = matching }, Cmd.none
     | Search when String.IsNullOrWhiteSpace model.Term -> model, Cmd.none
     | Search ->
-        let route = SearchRoute(model.Term.Trim(), model.Matching)
+        let route =
+            SearchRoute(
+                model.Term.Trim(),
+                model.Matching,
+                pickedFor model "companies" |> Option.map _.Code |> ValueOption.ofOption
+            )
+
         let backend = backendOf http model
         let registers = registersOf model
         let codes = selectedSources model "companies" |> List.map _.Code
@@ -841,7 +889,9 @@ let update (js: IJSRuntime) (http: HttpClient) message (model: Model) =
     | SetPersonTerm term -> { model with PersonTerm = term }, Cmd.none
     | SearchPeople when PersonName.tryParse model.PersonTerm |> ValueOption.isNone -> model, Cmd.none
     | SearchPeople ->
-        let route = PersonRoute(model.PersonTerm.Trim())
+        let route =
+            PersonRoute(model.PersonTerm.Trim(), pickedFor model "people" |> Option.map _.Code |> ValueOption.ofOption)
+
         let backend = backendOf http model
         let registers = registersOf model
         let codes = selectedSources model "people" |> List.map _.Code
@@ -886,28 +936,6 @@ let update (js: IJSRuntime) (http: HttpClient) message (model: Model) =
                 model.ShowingAll.Add key
 
         { model with ShowingAll = showing }, Cmd.none
-    | ToggleChip(card, code) ->
-        let off = leftOut model card
-        let changed = if off.Contains code then off.Remove code else off.Add code
-
-        { model with
-            LeftOut = model.LeftOut.Add(card, changed)
-        },
-        Cmd.none
-    | ToggleAllChips card ->
-        let offered = chipSources model card |> List.map _.Code |> Set.ofList
-        let off = leftOut model card
-        // All selected: the All chip leaves every one out; otherwise it selects every one.
-        let changed =
-            if Set.isEmpty (Set.intersect off offered) then
-                offered
-            else
-                Set.empty
-
-        { model with
-            LeftOut = model.LeftOut.Add(card, changed)
-        },
-        Cmd.none
     | LookUp(code, number) ->
         { model with
             Code = code
@@ -991,7 +1019,7 @@ let update (js: IJSRuntime) (http: HttpClient) message (model: Model) =
     | BulkRead items ->
         let isRunning = running items
         let finished = not (Set.isEmpty (running model.Bulk - isRunning))
-        let poll = not isRunning.IsEmpty && not model.Polling
+        let poll = not (isRunning.IsEmpty || model.Polling)
 
         { model with
             Bulk = items
@@ -1003,11 +1031,11 @@ let update (js: IJSRuntime) (http: HttpClient) message (model: Model) =
                 (if finished then loadRegisters http else Cmd.none)
             ]
     | Poll -> { model with Polling = false }, loadBulk http
-    | Download id ->
+    | Download pid ->
         model,
-        sendThen http (fun () -> new HttpRequestMessage(HttpMethod.Post, $"api/bulk/{escaped id}/download")) BulkChanged
-    | RemoveBulk id ->
-        model, sendThen http (fun () -> new HttpRequestMessage(HttpMethod.Delete, $"api/bulk/{escaped id}")) BulkChanged
+        sendThen http (fun () -> new HttpRequestMessage(HttpMethod.Post, $"api/bulk/{escaped pid}/download")) BulkChanged
+    | RemoveBulk pid ->
+        model, sendThen http (fun () -> new HttpRequestMessage(HttpMethod.Delete, $"api/bulk/{escaped pid}")) BulkChanged
     | SetPathDraft(key, value) ->
         { model with
             PathDrafts = model.PathDrafts.Add(key, value)
@@ -1055,9 +1083,9 @@ let update (js: IJSRuntime) (http: HttpClient) message (model: Model) =
             ()
             (fun files -> CurrentRead(id, Listed files))
             (fun error -> CurrentRead(id, NotListed error.Message))
-    | CurrentRead(id, files) ->
+    | CurrentRead(pid, files) ->
         { model with
-            Current = model.Current.Add(id, files)
+            Current = model.Current.Add(pid, files)
         },
         Cmd.none
     | FollowLink hash ->
@@ -1098,17 +1126,19 @@ let update (js: IJSRuntime) (http: HttpClient) message (model: Model) =
                     Error = ValueSome $"The link names the register {code}, which this demo doesn't read."
                 },
                 Cmd.none
-        | SearchRoute(term, matching) ->
+        | SearchRoute(term, matching, register) ->
             { model with
                 Page = CasePage
                 Term = term
                 Matching = matching
+                Chosen = choosing model "companies" register
             },
             Cmd.ofMsg Search
-        | PersonRoute name ->
+        | PersonRoute(name, register) ->
             { model with
                 Page = CasePage
                 PersonTerm = name
+                Chosen = choosing model "people" register
             },
             Cmd.ofMsg SearchPeople
     | SetKeyDraft draft -> { model with KeyDraft = draft }, Cmd.none
@@ -1183,25 +1213,33 @@ let navButton (model: Model) dispatch page (label: string) =
         label
     }
 
-/// The registers switched on, under their regions, each with its flag. A native select can't show images, so this is a button and a list.
-let picker (model: Model) dispatch =
-    let sources = enabledSources model
-
+/// A register picker: the sources under their regions, each with its flag, and with all set, "All registers" first. A native select can't
+/// show images, so this is a button and a list. current is the source picked, none for all.
+let registerPicker
+    (model: Model)
+    dispatch
+    (key: string)
+    (sources: RegisterDto list)
+    (current: RegisterDto option)
+    (all: bool)
+    (choose: RegisterDto voption -> Message)
+    =
     div {
         attr.``class`` "picker"
 
         button {
             attr.``class`` "picker-button"
             attr.``type`` "button"
-            on.click (fun _ -> dispatch TogglePicker)
+            on.click (fun _ -> dispatch (TogglePicker key))
 
-            match sourceOf model model.Code with
-            | Some current when isOn model current.Code ->
+            match sources, current with
+            | [], _ -> span { "Switch a register on in Settings" }
+            | _, Some current ->
                 concat {
                     flagOf current.Flag
                     span { current.Label }
                 }
-            | _ -> span { "Switch a register on in Settings" }
+            | _, None -> span { $"All registers ({sources.Length})" }
 
             span {
                 attr.``class`` "caret"
@@ -1209,9 +1247,26 @@ let picker (model: Model) dispatch =
             }
         }
 
-        if model.PickerOpen then
+        if model.OpenPicker = ValueSome key && not sources.IsEmpty then
             div {
                 attr.``class`` "picker-list"
+
+                if all then
+                    button {
+                        attr.``type`` "button"
+
+                        attr.``class`` (
+                            if current.IsNone then
+                                "picker-item chosen"
+                            else
+                                "picker-item"
+                        )
+
+                        on.click (fun _ -> dispatch (choose ValueNone))
+                        span { $"All registers ({sources.Length})" }
+                    }
+                else
+                    empty ()
 
                 forEach regions (fun region ->
                     match sources |> List.filter (fun source -> source.Region = region) with
@@ -1228,13 +1283,13 @@ let picker (model: Model) dispatch =
                                     attr.``type`` "button"
 
                                     attr.``class`` (
-                                        if source.Code = model.Code then
+                                        if current |> Option.exists (fun picked -> picked.Code = source.Code) then
                                             "picker-item chosen"
                                         else
                                             "picker-item"
                                     )
 
-                                    on.click (fun _ -> dispatch (Pick source.Code))
+                                    on.click (fun _ -> dispatch (choose (ValueSome source)))
                                     flagOf source.Flag
                                     span { source.Label }
                                 })
@@ -1243,6 +1298,26 @@ let picker (model: Model) dispatch =
         else
             empty ()
     }
+
+/// The lookup's picker: one register, the switched-on ones.
+let picker (model: Model) dispatch =
+    registerPicker
+        model
+        dispatch
+        "lookup"
+        (enabledSources model)
+        (sourceOf model model.Code
+         |> Option.filter (fun source -> isOn model source.Code))
+        false
+        (fun source ->
+            match source with
+            | ValueSome source -> Pick source.Code
+            | ValueNone -> Pick model.Code)
+
+/// A search card's picker: all the registers it offers, or one.
+let searchPicker (model: Model) dispatch (card: string) =
+    registerPicker model dispatch card (chipSources model card) (pickedFor model card) true (fun source ->
+        Choose(card, source |> ValueOption.map _.Code))
 
 /// The words of Finland's trade register status codes (REK_KDI), as Finland.fs maps them: YTJ's answer holds the code alone.
 let finnishStatus (code: string) =
@@ -1318,7 +1393,7 @@ let groupedResults
 
             tbody {
                 forEach withMatches (fun (source, summary, items) ->
-                    let key = card + ":" + source.Code
+                    let key = $"{card}:{source.Code}"
                     let showingAll = model.ShowingAll.Contains key
 
                     concat {
@@ -1371,46 +1446,8 @@ let private outcomeOf (reason: string) (summary: string) (items: 'T array) =
     | null -> Ok(summary, List.ofArray items)
     | reason -> Error reason
 
-/// A chip per register the card offers, with its flag and code, and an All chip; each selected unless left out.
-let chips (model: Model) dispatch (card: string) =
-    let offered = chipSources model card
-    let off = leftOut model card
-    let allOn = offered |> List.forall (fun source -> not (off.Contains source.Code))
-
-    match offered with
-    | [] ->
-        p {
-            attr.``class`` "muted compact"
-            "No register is available to ask."
-        }
-    | _ ->
-        div {
-            attr.``class`` "chips"
-
-            button {
-                attr.``type`` "button"
-                attr.``class`` (if allOn then "chip on" else "chip")
-                on.click (fun _ -> dispatch (ToggleAllChips card))
-                "All"
-            }
-
-            forEach offered (fun source ->
-                button {
-                    attr.``type`` "button"
-                    attr.``class`` (if off.Contains source.Code then "chip" else "chip on")
-                    attr.title source.Label
-                    on.click (fun _ -> dispatch (ToggleChip(card, source.Code)))
-                    flagOf source.Flag
-                    source.Code
-                })
-        }
-
-/// True when the card has a selected register to ask.
-let anySelected (model: Model) (card: string) =
-    let off = leftOut model card
-
-    chipSources model card
-    |> List.exists (fun source -> not (off.Contains source.Code))
+/// True when the card has a register to ask.
+let anySelected (model: Model) (card: string) = not (chipSources model card).IsEmpty
 
 /// Copies the hash's link; "Copied" for a moment after.
 let copyButton (model: Model) dispatch (key: string) (hash: string voption) =
@@ -1449,7 +1486,7 @@ let searchCard (model: Model) dispatch =
 
         p {
             attr.``class`` "muted"
-            "Asks the registers selected below at once; each answers from its own search, live. A register shows at most its first page, and Poland and Costa Rica search by number only."
+            "Asks every register switched on at once, or the one picked; each answers from its own search, live. A register shows at most its first page, and Poland and Costa Rica search by number only."
         }
 
         div {
@@ -1459,7 +1496,7 @@ let searchCard (model: Model) dispatch =
                 "Name"
 
                 input {
-                    bind.input.string model.Term (fun term -> dispatch (SetTerm term))
+                    bind.input.string model.Term (SetTerm >> dispatch)
 
                     on.keydown (fun event ->
                         if event.Key = "Enter" then
@@ -1475,7 +1512,7 @@ let searchCard (model: Model) dispatch =
 
                     bind.change.string
                         (Route.matchWord model.Matching |> ValueOption.defaultValue "startswith")
-                        (fun word -> dispatch (SetMatching(Route.matchOf word)))
+                        (Route.matchOf >> SetMatching >> dispatch)
 
                     option {
                         attr.value "exact"
@@ -1494,6 +1531,11 @@ let searchCard (model: Model) dispatch =
                 }
             }
 
+            label {
+                "Registers"
+                searchPicker model dispatch "companies"
+            }
+
             button {
                 attr.``class`` "primary"
                 attr.disabled (model.Searching || not (anySelected model "companies"))
@@ -1502,7 +1544,6 @@ let searchCard (model: Model) dispatch =
             }
         }
 
-        chips model dispatch "companies"
 
         match model.Found with
         | ValueNone -> empty ()
@@ -1552,7 +1593,7 @@ let personCard (model: Model) dispatch =
 
         p {
             attr.``class`` "muted"
-            "Is this person a director, officer or owner of a company? Asks the registers selected below that publish people and let them be searched, at once. A register holding the name doesn't say it is the person meant, and no match never says the person holds no role. Type Firstname Lastname, or Lastname, Firstname."
+            "Is this person a director, officer or owner of a company? Asks the registers that publish people and let them be searched, all at once or the one picked. A register holding the name doesn't say it is the person meant, and no match never says the person holds no role. Type Firstname Lastname, or Lastname, Firstname."
         }
 
         div {
@@ -1562,12 +1603,17 @@ let personCard (model: Model) dispatch =
                 "Name"
 
                 input {
-                    bind.input.string model.PersonTerm (fun term -> dispatch (SetPersonTerm term))
+                    bind.input.string model.PersonTerm (SetPersonTerm >> dispatch)
 
                     on.keydown (fun event ->
                         if event.Key = "Enter" then
                             dispatch SearchPeople)
                 }
+            }
+
+            label {
+                "Registers"
+                searchPicker model dispatch "people"
             }
 
             button {
@@ -1578,7 +1624,6 @@ let personCard (model: Model) dispatch =
             }
         }
 
-        chips model dispatch "people"
 
         match model.People with
         | ValueNone -> empty ()
@@ -1679,7 +1724,16 @@ let lookupCard (model: Model) dispatch =
 
             label {
                 "Registration number"
-                input { bind.input.string model.Number (fun number -> dispatch (SetNumber number)) }
+
+                input {
+                    attr.placeholder (
+                        match sourceOf model model.Code with
+                        | Some source when source.Example <> "" -> $"such as {source.Example}"
+                        | _ -> ""
+                    )
+
+                    bind.input.string model.Number (SetNumber >> dispatch)
+                }
             }
 
             button {
@@ -1790,7 +1844,7 @@ let keysCard (model: Model) dispatch =
                 input {
                     attr.``type`` "password"
                     attr.autocomplete "off"
-                    bind.input.string model.KeyDraft (fun draft -> dispatch (SetKeyDraft draft))
+                    bind.input.string model.KeyDraft (SetKeyDraft >> dispatch)
                 }
             }
 

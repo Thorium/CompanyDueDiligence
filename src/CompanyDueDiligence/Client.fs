@@ -10,7 +10,7 @@ open System.Threading.Tasks
 
 /// The API key of an application registered as "API Key" on the Companies House Developer Hub. Printing one (%A, ToString) hides it.
 [<StructuredFormatDisplay("{Display}")>]
-type Credentials =
+type internal Credentials =
     {
         ApiKey: string
     }
@@ -19,9 +19,9 @@ type Credentials =
     override this.ToString() = this.Display
 
 /// Base addresses of the Public Data API and the Document API. A missing trailing '/' is added when the client is created.
-type Endpoints = { Api: Uri; Document: Uri }
+type internal Endpoints = { Api: Uri; Document: Uri }
 
-module Endpoints =
+module internal Endpoints =
 
     /// The scheme, host and port of each address: the only places the key goes.
     let internal origins (endpoints: Endpoints) =
@@ -46,7 +46,7 @@ module Endpoints =
 
 /// What an answer said about the rate limit. The rate limiting guide names no headers, so each is read only if present, and one that is
 /// missing or unusable changes nothing.
-type RateLimit =
+type internal RateLimit =
     {
         /// The Retry-After header as a delay.
         RetryAfter: TimeSpan voption
@@ -60,7 +60,7 @@ type RateLimit =
         Remaining: int voption
     }
 
-module RateLimit =
+module internal RateLimit =
 
     /// The rate limiting guide's period: 600 requests per application, then 429 until the period ends.
     let documentedWindow = TimeSpan.FromMinutes 5.
@@ -88,7 +88,7 @@ module RateLimit =
 
 /// A success answer the client could not read. Printing one (%A, ToString) leaves the body out.
 [<StructuredFormatDisplay("{Display}")>]
-type UnreadableAnswer =
+type internal UnreadableAnswer =
     {
         HttpStatus: int
         /// The answer as sent. It can hold personal data: keep it out of logs.
@@ -102,7 +102,7 @@ type UnreadableAnswer =
 
     override this.ToString() = this.Display
 
-type CompaniesHouseFailure =
+type internal CompaniesHouseFailure =
     /// The request was not sent: an argument cannot be valid, or the address isn't one of the client's endpoints.
     | InvalidRequest of reason: string
     /// A 401: the key is wrong, revoked, or restricted away from this caller.
@@ -128,13 +128,13 @@ type CompaniesHouseFailure =
 
 /// What the application should do about a failure.
 [<RequireQualifiedAccess>]
-type FailureAction =
+type internal FailureAction =
     /// Temporary: the calls only read, so the same call can run again after a wait.
     | RetryLater
     /// The same call fails the same way until the key, the request or this client changes.
     | FixRequest
 
-module CompaniesHouseFailure =
+module internal CompaniesHouseFailure =
 
     /// One line saying what went wrong, for logs and exception messages. It holds no key and no unreadable answer's body.
     let describe failure =
@@ -202,7 +202,7 @@ module internal Timeouts =
 
 /// How a client spaces its keyed calls and answers a 429. The limit belongs to the key: clients sharing one key need to share out Calls.
 [<Struct>]
-type Pacing =
+type internal Pacing =
     {
         /// At most this many calls in any Window.
         Calls: int
@@ -213,7 +213,7 @@ type Pacing =
         LongestWait: TimeSpan
     }
 
-module Pacing =
+module internal Pacing =
 
     /// The rate limiting guide's limit, two retries, and a wait of up to its period.
     let documented =
@@ -307,7 +307,7 @@ type internal Pacer(pacing: Pacing, now: unit -> DateTimeOffset, delay: TimeSpan
 /// A Companies House connection. Keep it for the application's lifetime; a handler passed in stays the caller's and is never disposed here.
 /// A caller's handler must not follow redirects: CreateHandler's doesn't, so a 3xx comes back as an answer the client can act on.
 [<Sealed>]
-type CompaniesHouseClient
+type internal CompaniesHouseClient
     internal
     (
         credentials: Credentials,
@@ -387,7 +387,7 @@ type CompaniesHouseClient
             Pacer pacing
         )
 
-module CompaniesHouseClient =
+module internal CompaniesHouseClient =
 
     /// A client over a caller-owned handler, with Pacing.documented.
     let create credentials endpoints (handler: HttpMessageHandler) =

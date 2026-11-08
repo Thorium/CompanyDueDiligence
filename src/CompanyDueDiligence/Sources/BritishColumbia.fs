@@ -24,8 +24,7 @@ module internal BritishColumbia =
             Owners = Support.NotOffered "OrgBook lists no owners"
             Cost = AccessCost.Free
             RateLimit = RateLimitPolicy.NotPublished(2, TimeSpan.FromSeconds 1.)
-            Licence =
-                "Access Only License - British Columbia, as the API's OpenAPI document states; not an open licence"
+            Licence = "Access Only License - British Columbia: reproduction needs written permission"
         }
 
     /// OrgBook is an index of the credentials BC Registries issued, so a number not found in it can still be on the register.

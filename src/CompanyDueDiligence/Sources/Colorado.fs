@@ -194,7 +194,8 @@ type internal ColoradoRegistry(connection: SourceConnection) =
                 | ValueNone ->
                     Task.FromResult(
                         Error(
-                            RegistryFailure.InvalidRequest "A Colorado entity ID is eleven digits, such as 20131234567"
+                            RegistryFailure.InvalidRequest
+                                "A Colorado entity ID is ten or eleven digits, such as 20131234567"
                         )
                     )
                 | ValueSome pid ->

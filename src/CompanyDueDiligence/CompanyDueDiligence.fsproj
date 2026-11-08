@@ -5,7 +5,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <RootNamespace>CompanyDueDiligence</RootNamespace>
     <PackageId>CompanyDueDiligence</PackageId>
-    <Version>0.3.0</Version>
+    <Version>1.0.0</Version>
     <Authors>Tuomas Hietanen</Authors>
     <PackageLicenseExpression>Unlicense</PackageLicenseExpression>
     <Description>A company due diligence case file for a compliance team: connects register records, filings, LEI data, sanctions list screening and vendor checks, with their links, flags and gaps, for an officer to decide. It decides nothing and never says clear. Reads 58 company registers in Europe, the Americas, Asia, Africa and Oceania, by API or from files the host downloads, and GLEIF. Unofficial; not affiliated with any of them.</Description>
@@ -15,7 +15,23 @@
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>icon.png</PackageIcon>
-    <PackageReleaseNotes>v0.3.0:
+    <PackageReleaseNotes>v1.0.0:
+- Companies House run live on 2026-11-08, on companies of each type
+- REMOVED: the Companies House client, Api and record types from the public API (BREAKING); Sources.companiesHouse builds the registry, which keeps filings, insolvency, documents and officer search
+- REMOVED: NameMatch.isMatch; NameMatch.normalise is public
+- CHANGED: IFilingRegister states a Coverage in place of Register and Jurisdictions, and FilingsAsync answers a FilingHistory (newest first, Total, Complete); Companies House reads the newest 1,000 and a case records the rest as a gap
+- CHANGED: Sources.gleif and CaseSources.CrossCheck take an ILeiCrossCheck; BulkIndexes.openAsync and BulkDownloads.LoadAsync answer an IBulkRegistry, which is IDisposable
+- CHANGED: BulkDownloads fetches 16 sources: the SII nómina is by hand, as its terms allow personal non-commercial use only
+- CHANGED: each source's Coverage.Licence states the licence or terms found for it
+- ADDED: Company.create, RegistryCoverage.create, Evidence.create, CaseSources.ofRegistries, CaseStart.create and VendorCheck.create, so added fields break no caller; a versioning policy in the README
+- ADDED: CaseJson reads an older schema version through upgrade steps and refuses a newer one
+- ADDED: LinkKind.Establishment; every ISO 3166 country by English name when placing a home record; an unplaced number names its own register
+- FIXED: Companies House, from live answers: officer lists end on an empty page with a total of 0; a profile without has_been_liquidated settles insolvency history; the profile 404's message body is not held; an empty officer list or filing history for an unknown number is NotAvailable; blank address parts are dropped
+- FIXED: an overseas company's annual filing isn't unconfirmed, as it files no confirmation statement; a case reads a UK establishment's flags from its overseas company, not as a gap on the establishment
+- FIXED: capital filings aren't constitutional documents, so they open no reading gap
+- FIXED: a registration number without a digit, such as "N/A", is no number; a US state named in a register's or law's wording places the state
+
+v0.3.0:
 - CHANGED: Renamed to CompanyDueDiligence: package, namespace, solution and folder
 - REMOVED: Company.isGood, because the library doesn't judge a company
 - CHANGED: TryFindAsync answers Availability, so "not found" can be "can't tell"

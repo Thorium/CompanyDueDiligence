@@ -154,7 +154,7 @@ module internal BulkListing =
 
     /// The last segment of the URL's path, unescaped.
     let fileNameOf (url: Uri) =
-        Uri.UnescapeDataString(url.Segments |> Array.last).TrimEnd('/')
+        Uri.UnescapeDataString(url.Segments |> Array.last).TrimEnd '/'
 
     let private failureOf (status: HttpStatusCode) (what: string) =
         match int status with
@@ -442,7 +442,7 @@ module internal BulkResolvers =
         | absent -> missing absent
 
     let private ckanAction (site: string) (action: string) (query: string) =
-        Uri $"{site.TrimEnd('/')}/api/3/action/{action}?{query}"
+        Uri $"{site.TrimEnd '/'}/api/3/action/{action}?{query}"
 
     /// A CKAN dataset's resources by package_show, picked by choose.
     let private ckanDataset

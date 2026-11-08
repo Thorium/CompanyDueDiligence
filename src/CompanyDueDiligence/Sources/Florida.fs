@@ -26,7 +26,7 @@ module internal Florida =
             Owners = Support.NotOffered "The file lists no owners"
             Cost = AccessCost.Free
             RateLimit = RateLimitPolicy.NotPublished(1, TimeSpan.FromDays 1.)
-            Licence = "None stated on the layout page"
+            Licence = "None stated; free downloads for informational purposes"
         }
 
     [<Literal>]
@@ -322,7 +322,7 @@ module internal Florida =
             |> HashSet
 
         let registry =
-            BulkRegistry(
+            new BulkRegistry(
                 coverage,
                 normalNumber,
                 invalidNumber,
@@ -335,7 +335,7 @@ module internal Florida =
                 repeated
             )
 
-        BulkPartiesWithheld(
+        new BulkPartiesWithheld(
             registry,
             normalNumber,
             (fun key ->

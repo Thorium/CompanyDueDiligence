@@ -26,7 +26,7 @@ module internal DistrictOfColumbia =
                     "Beneficial owners' names and addresses as filed, with no kind, share, nature of control or dates"
             Cost = AccessCost.Free
             RateLimit = RateLimitPolicy.NotPublished(2, TimeSpan.FromSeconds 1.)
-            Licence = "CC BY 4.0 per Open Data DC; unverified, since the layers' metadata states no licence"
+            Licence = "CC BY 4.0, per each layer's ArcGIS item"
         }
 
     [<Literal>]

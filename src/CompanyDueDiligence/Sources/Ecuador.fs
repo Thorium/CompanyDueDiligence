@@ -23,7 +23,7 @@ module internal Ecuador =
             Owners = Support.NotOffered "The directory lists no shareholders"
             Cost = AccessCost.Free
             RateLimit = RateLimitPolicy.NotPublished(1, TimeSpan.FromDays 1.)
-            Licence = "None stated"
+            Licence = "None stated; on datosabiertos.gob.ec with no licence"
         }
 
     let invalidNumber = "A RUC has 13 digits; a Supercias expediente has up to 7"
@@ -245,7 +245,7 @@ module internal Ecuador =
                         | ValueNone -> struct (withoutRuc, skipped))
                     (struct (0, 0))
 
-            BulkRegistry(
+            new BulkRegistry(
                 coverage,
                 normalNumber,
                 invalidNumber,

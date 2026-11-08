@@ -474,6 +474,8 @@ type internal IndexedRegistry
                 | ValueSome _ -> withheld entry.Owners (evidence ValueNone (ownersFor purpose))
                 | ValueNone -> evidence ValueNone (NotAvailable "The file holds no company with this number"))
 
+    interface IBulkRegistry
+
     interface IDisposable with
         member _.Dispose() =
             records.Dispose()

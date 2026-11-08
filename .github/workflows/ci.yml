@@ -1,0 +1,41 @@
+name: CI
+
+# Builds, tests and packs on every push to main and every pull request. The tests run offline, against fake handlers.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: dotnet build CompanyDueDiligence.slnx -c Release
+      - run: dotnet test tests/CompanyDueDiligence.Tests -c Release --no-build
+      - run: dotnet test tests/CompanyDueDiligence.Server.Tests -c Release --no-build
+
+  pack:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: dotnet pack src/CompanyDueDiligence -c Release -o publish
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: publish/*.nupkg

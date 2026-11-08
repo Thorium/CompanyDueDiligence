@@ -32,25 +32,25 @@ let private resultOf (answer: Result<Evidence<Availability<SearchResult>>, Regis
 
 [<Fact>]
 let ``Exact compares whole names after normalising, ignoring case, accents and punctuation spacing`` () =
-    Assert.True(NameMatch.isMatch NameMatch.Exact "degrees group inc" "Degrees Group, Inc.")
-    Assert.True(NameMatch.isMatch NameMatch.Exact "CAFE DU MONDE S.A." "Café du Monde SA")
-    Assert.True(NameMatch.isMatch NameMatch.Exact "O'Neil  &  Sons" "ONEIL SONS")
-    Assert.False(NameMatch.isMatch NameMatch.Exact "degrees group" "Degrees Group, Inc.")
-    Assert.False(NameMatch.isMatch NameMatch.Exact "degrees group inc" "Six Degrees Group, Inc.")
+    Assert.True(NameMatch.matcher NameMatch.Exact "degrees group inc" "Degrees Group, Inc.")
+    Assert.True(NameMatch.matcher NameMatch.Exact "CAFE DU MONDE S.A." "Café du Monde SA")
+    Assert.True(NameMatch.matcher NameMatch.Exact "O'Neil  &  Sons" "ONEIL SONS")
+    Assert.False(NameMatch.matcher NameMatch.Exact "degrees group" "Degrees Group, Inc.")
+    Assert.False(NameMatch.matcher NameMatch.Exact "degrees group inc" "Six Degrees Group, Inc.")
 
 [<Fact>]
 let ``StartsWith and Contains compare normalised names as text`` () =
-    Assert.True(NameMatch.isMatch NameMatch.StartsWith "degrees gr" "Degrees Group, Inc.")
-    Assert.False(NameMatch.isMatch NameMatch.StartsWith "degrees" "Six Degrees Group, Inc.")
-    Assert.True(NameMatch.isMatch NameMatch.Contains "degrees" "Degrees Group, Inc.")
-    Assert.True(NameMatch.isMatch NameMatch.Contains "group inc" "Degrees Group, Inc.")
-    Assert.False(NameMatch.isMatch NameMatch.Contains "groupinc" "Degrees Group, Inc.")
+    Assert.True(NameMatch.matcher NameMatch.StartsWith "degrees gr" "Degrees Group, Inc.")
+    Assert.False(NameMatch.matcher NameMatch.StartsWith "degrees" "Six Degrees Group, Inc.")
+    Assert.True(NameMatch.matcher NameMatch.Contains "degrees" "Degrees Group, Inc.")
+    Assert.True(NameMatch.matcher NameMatch.Contains "group inc" "Degrees Group, Inc.")
+    Assert.False(NameMatch.matcher NameMatch.Contains "groupinc" "Degrees Group, Inc.")
 
 [<Fact>]
 let ``a name with no letter or digit matches nothing`` () =
     for matching in modes do
-        Assert.False(NameMatch.isMatch matching "&&&" "&&&")
-        Assert.False(NameMatch.isMatch matching "" "")
+        Assert.False(NameMatch.matcher matching "&&&" "&&&")
+        Assert.False(NameMatch.matcher matching "" "")
 
 [<Fact>]
 let ``normalising ASCII text gives what the Unicode path gives`` () =
@@ -340,7 +340,7 @@ let private socrataCases =
 let private oneilCondition (column: string) (matching: NameMatch) =
     match matching with
     | NameMatch.Exact -> $"({column} = 'O''NEIL & SONS, INC.' OR {column} like '%%O%%NEIL%%S%%ON%%S%%I%%N%%C%%')"
-    | NameMatch.StartsWith -> $"{column} like '%%O%%NEIL%%S%%ON%%S%%I%%N%%C%%'"
+    | NameMatch.StartsWith
     | NameMatch.Contains -> $"{column} like '%%O%%NEIL%%S%%ON%%S%%I%%N%%C%%'"
 
 let private searchCase (case: SocrataCase) (answer: string) (name: string) (matching: NameMatch) =
@@ -415,7 +415,7 @@ let ``every Socrata register keeps only the names matching in each mode`` () : T
                 // The third, O'NEIL & SONS HOLDINGS, INC., neither starts with nor contains ONEIL SONS INC once normalised.
                 let expected = List.take 2 oneilNames
 
-                Assert.True((expected = names), $"{case.Label} {matching}: %A{names}")
+                Assert.True((expected = names), $"%s{case.Label} {matching}: %A{names}")
     }
 
 [<Fact>]
@@ -462,7 +462,7 @@ let ``a Socrata search refuses an exact name with no letter or digit, and a blan
                 ] do
                 match! registry.SearchByNameAsync(name, matching, case.Jurisdiction, ct) with
                 | Error(RegistryFailure.InvalidRequest _) -> ()
-                | other -> failwith $"{case.Label}: %A{other}"
+                | other -> failwith $"%s{case.Label}: %A{other}"
 
             let elsewhere = Jurisdiction.ofCode "GB"
             let! outside = registry.SearchByNameAsync("x", NameMatch.Exact, elsewhere, ct)

@@ -89,7 +89,7 @@ type HangingHandler() =
 [<Literal>]
 let Key = "the-test-key-value"
 
-let credentials = { ApiKey = Key }
+let internal credentials = { ApiKey = Key }
 
 /// A clock that any wait moves on at once, noting the wait, so that pacing costs a test no time.
 type FakeClock() =
@@ -104,16 +104,16 @@ type FakeClock() =
         now <- now + wait
         Task.CompletedTask
 
-let pacedWith (clock: FakeClock) (pacing: Pacing) (handler: HttpMessageHandler) =
+let internal pacedWith (clock: FakeClock) (pacing: Pacing) (handler: HttpMessageHandler) =
     let pacer = Pacer(pacing, (fun () -> clock.Now), clock.Delay)
     CompaniesHouseClient(credentials, Endpoints.live, handler, ValueNone, pacer)
 
-let clientWith (handler: HttpMessageHandler) =
+let internal clientWith (handler: HttpMessageHandler) =
     pacedWith (FakeClock()) Pacing.documented handler
 
 let ct = CancellationToken.None
 
-let expectOk result =
+let internal expectOk result =
     result |> Result.defaultWith (CompaniesHouseFailure.describe >> failwith)
 
 /// A list answer holding items, with a total under the name the list uses.

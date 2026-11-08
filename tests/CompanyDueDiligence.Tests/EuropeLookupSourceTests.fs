@@ -606,10 +606,7 @@ let ``a Slovak entity in liquidation is winding up, with that against it, and it
         Assert.Contains(officers, (fun officer -> officer.Role = OfficerRole.Director && not officer.Current))
     }
 
-[<Theory>]
-[<InlineData("040", "AT")>]
-[<InlineData("703", "SK")>]
-[<InlineData("898", "")>]
+[<Theory; InlineData("040", "AT"); InlineData("703", "SK"); InlineData("898", "")>]
 let ``a Slovak corporate owner's registration country is the ISO code of RPO's numeric one``
     (code: string, expected: string)
     : Task =
@@ -1420,7 +1417,7 @@ let ``each of these sources is free and declares its pace and licence`` () =
     let licenceOf (registry: ICompanyRegistry) = registry.Coverage.Licence
     let connection = connectionOver handler
     Assert.Contains("NLOD 2.0", licenceOf (Sources.norway connection))
-    Assert.Contains("No licence stated", licenceOf (Sources.czechia connection))
+    Assert.Contains("500 a minute", licenceOf (Sources.czechia connection))
     Assert.Contains("CC BY 4.0", licenceOf (Sources.slovakia connection))
     Assert.Contains("CC BY 4.0", licenceOf (Sources.ireland connection))
-    Assert.Contains("No licence stated", licenceOf (Sources.poland connection))
+    Assert.Contains("art. 24", licenceOf (Sources.poland connection))

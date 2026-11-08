@@ -30,7 +30,7 @@ module internal France =
                     TimeSpan.FromSeconds 1.,
                     "openapi.json: 7 per second per address, and 30 per second per ASN"
                 )
-            Licence = "No data licence stated: openapi.json's MIT tag names no data, so its reuse terms are unverified"
+            Licence = "Licence Ouverte 2.0, per data.gouv.fr; the API's own record states none"
         }
 
     /// Non-diffusible companies and those refused registration are left out of the API, so its silence says nothing about a number.

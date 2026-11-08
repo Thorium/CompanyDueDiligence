@@ -30,7 +30,7 @@ module internal Taiwan =
             Cost = AccessCost.Free
             RateLimit = RateLimitPolicy.NotPublished(2, TimeSpan.FromSeconds 1.)
             Licence =
-                "Open Government Data License v1, per the platform's open data declaration; not re-read. Free; the platform's rules ask for a usage notice and IP registration"
+                "Open Government Data License v1, attribution required; the API guide requires an emailed usage notice and IP registration before use"
         }
 
     /// The API holds companies only, so a UBN it doesn't hold can be a business (商業), a branch or another body.

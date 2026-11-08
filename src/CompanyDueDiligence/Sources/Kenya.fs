@@ -29,7 +29,7 @@ module internal Kenya =
                 AccessCost.FreeWithKey
                     "Register on developer.go.ke (GavaConnect) and create an app for PIN Checker by PIN; pass its consumer key and secret"
             RateLimit = RateLimitPolicy.NotPublished(2, TimeSpan.FromSeconds 1.)
-            Licence = "No licence found in the GavaConnect documentation. Not run live"
+            Licence = "None found; free to approved developers under KRA's developer guidelines, not read"
         }
 
     /// KRA's answer "Invalid PIN", code 19005, which doesn't say whether the PIN was never issued.

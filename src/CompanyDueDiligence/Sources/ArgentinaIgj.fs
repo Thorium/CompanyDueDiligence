@@ -390,7 +390,7 @@ module internal ArgentinaIgj =
 
         let repeated = HashSet<string>(Seq.append index.Repeated repeatedKeys)
 
-        BulkRegistry(
+        new BulkRegistry(
             coverage,
             normalNumber,
             invalidNumber,

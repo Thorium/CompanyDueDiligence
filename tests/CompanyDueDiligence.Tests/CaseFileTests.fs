@@ -2,6 +2,7 @@
 module CaseFileTests
 
 open System
+open System.Text.Json
 open Microsoft.FSharp.Reflection
 open Xunit
 open CompanyDueDiligence
@@ -1183,3 +1184,52 @@ let ``an empty review list in the export says it clears nothing`` () =
 
     Assert.Empty(CaseFile.reviewNeeded empty)
     Assert.Contains("doesn't mean anything has been cleared", CaseExport.toText false empty)
+
+[<Fact>]
+let ``an older stored case is upgraded one version at a time, and a missing or broken step refuses it`` () =
+    let current = CaseJson.toJson opened
+
+    // A version 0 that had no Notes: its step adds them, empty, and says version 1.
+    let older =
+        let root = Nodes.JsonNode.Parse(current).AsObject()
+        root.Remove "Notes" |> ignore
+        root["SchemaVersion"] <- Nodes.JsonValue.Create 0
+        root.ToJsonString()
+
+    let addNotes (root: Nodes.JsonObject) =
+        root["Notes"] <- Nodes.JsonArray()
+        root["SchemaVersion"] <- Nodes.JsonValue.Create 1
+        root
+
+    Assert.Equal(Ok opened, CaseJson.ofJsonWith (Map [ 0, addNotes ]) 1 older)
+    Assert.Equal(Error(CaseJsonRefused.WrongVersion(ValueSome 0)), CaseJson.ofJsonWith Map.empty 1 older)
+
+    let forgetsVersion (root: Nodes.JsonObject) =
+        root["Notes"] <- Nodes.JsonArray()
+        root
+
+    Assert.Equal(
+        Error(CaseJsonRefused.WrongVersion(ValueSome 0)),
+        CaseJson.ofJsonWith (Map [ 0, forgetsVersion ]) 1 older
+    )
+    // A file from a newer library is refused, never read as this version.
+    Assert.Equal(
+        Error(CaseJsonRefused.WrongVersion(ValueSome 2)),
+        CaseJson.ofJsonWith Map.empty 1 (current.Replace("\"SchemaVersion\":1", "\"SchemaVersion\":2"))
+    )
+
+[<Fact>]
+let ``a case holding a null text can't be written, and says so`` () =
+    let error =
+        Assert.Throws<ArgumentException>(fun () -> CaseJson.toJson { opened with CaseId = null } |> ignore)
+
+    Assert.Contains("null", error.Message)
+
+[<Fact>]
+let ``a stored case holding a name twice in one object is refused`` () =
+    let json = CaseJson.toJson opened
+    let doubled = json.Replace("\"CaseId\":", "\"CaseId\":\"X\",\"CaseId\":")
+
+    match CaseJson.ofJson doubled with
+    | Error(CaseJsonRefused.WrongShape _) -> ()
+    | other -> failwith $"%A{other}"

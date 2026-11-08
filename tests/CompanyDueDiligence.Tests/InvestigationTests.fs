@@ -489,6 +489,33 @@ let ``wording that places no jurisdiction becomes a gap, and isn't guessed`` () 
         Assert.Contains("Atlantis", gap.Detail)
         Assert.Equal(GapKind.NoRoute, gap.Kind)
         Assert.Equal<string list>([ "1" ], register.Calls)
+        let entity = case.Entities |> List.find (fun item -> item.Name = "FAR LTD")
+        Assert.Contains(EntityIdentity.NameOnly("FAR LTD", "number 9, as stated by Zedland"), entity.Identities)
+    }
+
+[<Fact>]
+let ``an unplaced number names the register it is on, not the register that states it`` () : Task =
+    task {
+        let far =
+            { registration "FAR LTD" "9" "Atlantis" with
+                Register = ValueSome "Atlantis Companies Office"
+            }
+
+        let register =
+            withOwnerAnswer (
+                Ok(
+                    Available
+                        {
+                            Owners = [ ownerOf far ]
+                            Statements = []
+                            Gaps = []
+                        }
+                )
+            )
+
+        let! case = openOn [ register ] "1" zz
+        let entity = case.Entities |> List.find (fun item -> item.Name = "FAR LTD")
+        Assert.Contains(EntityIdentity.NameOnly("FAR LTD", "Atlantis Companies Office: number 9"), entity.Identities)
     }
 
 [<Fact>]
@@ -967,79 +994,81 @@ let ``scenario 1: what the UK form and the home papers say of capital is set sid
             new FakeHandler(companiesHouse (Map [ "FC000001", (overseasProfile, [], [], overseasFilings) ]))
 
         let! case = Investigation.openAsync (chSources handler) options (start "FC000001") ct
-        let document = case.Documents.Head
+        let runTail () =
+            let document = case.Documents.Head
 
-        let home =
-            case.Links |> List.find (fun item -> item.Kind = LinkKind.HomeRecord) |> _.To
+            let home =
+                case.Links |> List.find (fun item -> item.Kind = LinkKind.HomeRecord) |> _.To
 
-        let capital kind count =
-            Fact.Capital
-                {
-                    Kind = kind
-                    Shares = ValueSome count
-                    Amount = ValueNone
-                    Currency = ValueNone
-                }
+            let capital kind count =
+                Fact.Capital
+                    {
+                        Kind = kind
+                        Shares = ValueSome count
+                        Amount = ValueNone
+                        Currency = ValueNone
+                    }
 
-        let read, readingId =
-            CaseFile.attachReading
-                document.Id
-                [ capital CapitalKind.Issued 10000000m ]
-                "The form states 10,000,000 shares issued."
-                { officer with
-                    Source = "UK form OSIN01"
-                }
-                case
-            |> expectOk
+            let read, readingId =
+                CaseFile.attachReading
+                    document.Id
+                    [ capital CapitalKind.Issued 10000000m ]
+                    "The form states 10,000,000 shares issued."
+                    { officer with
+                        Source = "UK form OSIN01"
+                    }
+                    case
+                |> expectOk
 
-        let withHome =
-            read
-            |> CaseFile.addFinding
-                home
-                "home certificate"
-                [ capital CapitalKind.Authorised 10000000m; Fact.LegalForm "Corporation" ]
-                ValueNone
-                { officer with
-                    Source = "Certificate of incorporation"
-                }
-            |> expectOk
-            |> CaseFile.addFinding
-                home
-                "founders' resolution"
-                [ capital CapitalKind.Issued 9000000m ]
-                ValueNone
-                { officer with
-                    Source = "Founders' resolution"
-                }
-            |> expectOk
+            let withHome =
+                read
+                |> CaseFile.addFinding
+                    home
+                    "home certificate"
+                    [ capital CapitalKind.Authorised 10000000m; Fact.LegalForm "Corporation" ]
+                    ValueNone
+                    { officer with
+                        Source = "Certificate of incorporation"
+                    }
+                |> expectOk
+                |> CaseFile.addFinding
+                    home
+                    "founders' resolution"
+                    [ capital CapitalKind.Issued 9000000m ]
+                    ValueNone
+                    { officer with
+                        Source = "Founders' resolution"
+                    }
+                |> expectOk
 
-        Assert.StartsWith("E", readingId)
+            Assert.StartsWith("E", readingId)
 
-        let flags =
-            withHome.Flags
-            |> List.filter (fun flag -> flag.Kind = FlagKind.Disagreement)
-            |> List.map _.Statement
+            let flags =
+                withHome.Flags
+                |> List.filter (fun flag -> flag.Kind = FlagKind.Disagreement)
+                |> List.map _.Statement
 
-        Assert.Contains(
-            flags,
-            (fun text ->
-                text.Contains "10,000,000 shares issued"
-                && text.Contains "10,000,000 shares authorised")
-        )
+            Assert.Contains(
+                flags,
+                (fun text ->
+                    text.Contains "10,000,000 shares issued"
+                    && text.Contains "10,000,000 shares authorised")
+            )
 
-        Assert.Contains(
-            flags,
-            (fun text ->
-                text.Contains "10,000,000 shares issued"
-                && text.Contains "9,000,000 shares issued")
-        )
+            Assert.Contains(
+                flags,
+                (fun text ->
+                    text.Contains "10,000,000 shares issued"
+                    && text.Contains "9,000,000 shares issued")
+            )
 
-        // The UK record's stated legal form and the home certificate's agree, and aren't flagged.
-        Assert.DoesNotContain(flags, (fun text -> text.Contains "legal form"))
+            // The UK record's stated legal form and the home certificate's agree, and aren't flagged.
+            Assert.DoesNotContain(flags, (fun text -> text.Contains "legal form"))
 
-        // What the officer read closed that document's own gap, and left the home record's open.
-        Assert.Contains(gapsOn "filing to read" withHome, (fun gap -> gap.ClosedBy.IsSome))
-        Assert.Contains(gapsOn "Delaware" withHome, (fun gap -> gap.ClosedBy.IsNone))
+            // What the officer read closed that document's own gap, and left the home record's open.
+            Assert.Contains(gapsOn "filing to read" withHome, (fun gap -> gap.ClosedBy.IsSome))
+            Assert.Contains(gapsOn "Delaware" withHome, (fun gap -> gap.ClosedBy.IsNone))
+        runTail ()
     }
 
 [<Fact>]
@@ -1100,8 +1129,7 @@ let ``an overseas company's UK establishments are linked and followed`` () : Tas
 
         let! case = Investigation.openAsync (chSources handler) options (start "FC000001") ct
 
-        let link =
-            case.Links |> List.find (fun item -> item.Kind = LinkKind.UkEstablishment)
+        let link = case.Links |> List.find (fun item -> item.Kind = LinkKind.Establishment)
 
         Assert.Equal(case.Subject, link.From)
         Assert.Equal("GB:BR000001", link.To)
@@ -1116,6 +1144,12 @@ let ``an overseas company's UK establishments are linked and followed`` () : Tas
             handler.Calls
             |> List.filter (fun call -> call.Target.EndsWith "/company/FC000001")
             |> List.length
+        )
+
+        // The branch's flags are its overseas company's, read in the same case.
+        Assert.DoesNotContain(
+            case.Gaps,
+            fun gap -> gap.About = ValueSome "GB:BR000001" && gap.Subject = "filings and disputes"
         )
     }
 
@@ -1135,8 +1169,7 @@ let ``an establishment reached first leads back to its overseas company`` () : T
 
         let! case = Investigation.openAsync (chSources handler) options (start "BR000001") ct
 
-        let link =
-            case.Links |> List.find (fun item -> item.Kind = LinkKind.UkEstablishment)
+        let link = case.Links |> List.find (fun item -> item.Kind = LinkKind.Establishment)
 
         Assert.Equal("GB:FC000001", link.From)
         Assert.Equal("GB:BR000001", link.To)
@@ -1243,51 +1276,53 @@ let ``scenario 2: a forfeited branch shows on that branch, and says nothing abou
         let! afterTexas = follow tx "0800000001" usTx (expectOk afterDelaware)
         let! afterUtah = follow ut "6660001" usUt (expectOk afterTexas)
         let! afterMissouri = follow mo "7770001" usMo (expectOk afterUtah)
-        let full = expectOk afterMissouri
+        let runTail () =
+            let full = expectOk afterMissouri
 
-        // Texas's forfeiture is on Texas's record alone.
-        let texasEntity = full.Entities |> List.find (fun entity -> entity.Key = tx.Key)
-        Assert.Equal(ValueSome(CompanyStanding.Closed "Forfeited Franchise Tax"), texasEntity.Standing)
-        Assert.Equal(RecordRole.ForeignRegistration, texasEntity.Role)
-        let homeEntity = full.Entities |> List.find (fun entity -> entity.Key = home.Key)
-        Assert.Equal(ValueNone, homeEntity.Standing)
-        Assert.DoesNotContain(full.Flags, (fun flag -> flag.On = home.Key))
+            // Texas's forfeiture is on Texas's record alone.
+            let texasEntity = full.Entities |> List.find (fun entity -> entity.Key = tx.Key)
+            Assert.Equal(ValueSome(CompanyStanding.Closed "Forfeited Franchise Tax"), texasEntity.Standing)
+            Assert.Equal(RecordRole.ForeignRegistration, texasEntity.Role)
+            let homeEntity = full.Entities |> List.find (fun entity -> entity.Key = home.Key)
+            Assert.Equal(ValueNone, homeEntity.Standing)
+            Assert.DoesNotContain(full.Flags, (fun flag -> flag.On = home.Key))
 
-        // It is visible from the home record, marked as coming through the link, which is declared.
-        let seen =
-            CaseFile.flagsSeenFrom home.Key full
-            |> List.find (fun item -> item.Flag.On = tx.Key)
+            // It is visible from the home record, marked as coming through the link, which is declared.
+            let seen =
+                CaseFile.flagsSeenFrom home.Key full
+                |> List.find (fun item -> item.Flag.On = tx.Key)
 
-        Assert.Equal(LinkKind.ForeignRegistration, seen.Through.Head.Kind)
-        Assert.False seen.Through.Head.Evidenced
-        let text = CaseFile.describeSeen full seen
-        Assert.Contains("shows only that a link exists", text)
-        Assert.Contains("declared, not evidenced", text)
+            Assert.Equal(LinkKind.ForeignRegistration, seen.Through.Head.Kind)
+            Assert.False seen.Through.Head.Evidenced
+            let text = CaseFile.describeSeen full seen
+            Assert.Contains("shows only that a link exists", text)
+            Assert.Contains("declared, not evidenced", text)
 
-        // Delaware has a declared route, and Utah and Missouri have none.
-        Assert.Equal(
-            GapKind.NeedsPaidContract,
-            (gapsOn "Delaware" full |> List.find (fun gap -> gap.About = ValueSome home.Key)).Kind
-        )
+            // Delaware has a declared route, and Utah and Missouri have none.
+            Assert.Equal(
+                GapKind.NeedsPaidContract,
+                (gapsOn "Delaware" full |> List.find (fun gap -> gap.About = ValueSome home.Key)).Kind
+            )
 
-        Assert.Equal(GapKind.NoRoute, (full.Gaps |> List.find (fun gap -> gap.About = ValueSome ut.Key)).Kind)
-        Assert.Equal(GapKind.NoRoute, (full.Gaps |> List.find (fun gap -> gap.About = ValueSome mo.Key)).Kind)
+            Assert.Equal(GapKind.NoRoute, (full.Gaps |> List.find (fun gap -> gap.About = ValueSome ut.Key)).Kind)
+            Assert.Equal(GapKind.NoRoute, (full.Gaps |> List.find (fun gap -> gap.About = ValueSome mo.Key)).Kind)
 
-        // The UK company's own trouble doesn't become an allegation against the US record.
-        Assert.All(
-            full.Flags |> List.filter (fun flag -> flag.On = home.Key),
-            (fun _ -> failwith "No flag belongs here")
-        )
+            // The UK company's own trouble doesn't become an allegation against the US record.
+            Assert.All(
+                full.Flags |> List.filter (fun flag -> flag.On = home.Key),
+                (fun _ -> failwith "No flag belongs here")
+            )
 
-        // Reachable from the subject, every declared link is listed as such.
-        let review = CaseFile.reviewNeeded full
+            // Reachable from the subject, every declared link is listed as such.
+            let review = CaseFile.reviewNeeded full
 
-        Assert.Equal(
-            4,
-            review
-            |> List.filter (fun item -> item.Text.StartsWith "Declared link, not evidenced")
-            |> List.length
-        )
+            Assert.Equal(
+                4,
+                review
+                |> List.filter (fun item -> item.Text.StartsWith "Declared link, not evidenced")
+                |> List.length
+            )
+        runTail ()
     }
 
 [<Fact>]
@@ -1352,66 +1387,68 @@ let ``scenario 3: the filing's creditors and lender become links resting on its 
             new FakeHandler(companiesHouse (Map [ "00000021", (filedCompany, [], [], insolvencyFilings) ]))
 
         let! case = Investigation.openAsync (chSources handler) options (start "00000021") ct
-        let document = case.Documents |> List.find (fun item -> item.TransactionId = "T9")
+        let runTail () =
+            let document = case.Documents |> List.find (fun item -> item.TransactionId = "T9")
 
-        let read, reading =
-            CaseFile.attachReading
-                document.Id
-                [
-                    Fact.Other("creditors", "Example Fund Managers LLP; Example Securitisation SA")
-                ]
-                "Page 12 names the creditors."
-                { officer with
-                    Source = "AM03, page 12"
-                }
-                case
-            |> expectOk
+            let read, reading =
+                CaseFile.attachReading
+                    document.Id
+                    [
+                        Fact.Other("creditors", "Example Fund Managers LLP; Example Securitisation SA")
+                    ]
+                    "Page 12 names the creditors."
+                    { officer with
+                        Source = "AM03, page 12"
+                    }
+                    case
+                |> expectOk
 
-        let named name jurisdiction =
-            CaseFile.entityOf (EntityIdentity.NameOnly(name, "AM03 of 2021")) name PartyKind.LegalEntity jurisdiction
+            let named name jurisdiction =
+                CaseFile.entityOf (EntityIdentity.NameOnly(name, "AM03 of 2021")) name PartyKind.LegalEntity jurisdiction
 
-        let fund = named "Example Fund Managers LLP" (ValueSome gb)
+            let fund = named "Example Fund Managers LLP" (ValueSome gb)
 
-        let securitisation =
-            named "Example Securitisation SA" (ValueSome(Jurisdiction.ofCode "LU"))
+            let securitisation =
+                named "Example Securitisation SA" (ValueSome(Jurisdiction.ofCode "LU"))
 
-        let lender = named "Example Lending Inc" (ValueSome(Jurisdiction.ofCode "US"))
+            let lender = named "Example Lending Inc" (ValueSome(Jurisdiction.ofCode "US"))
 
-        let linked =
-            read
-            |> CaseFile.linkFromDocument case.Subject fund LinkKind.Creditor document.Id reading ValueNone
-            |> expectOk
-            |> CaseFile.linkFromDocument case.Subject securitisation LinkKind.Creditor document.Id reading ValueNone
-            |> expectOk
-            |> CaseFile.linkFromDocument
-                case.Subject
-                lender
-                (LinkKind.StatedRelationship "related lender")
-                document.Id
-                reading
-                ValueNone
-            |> expectOk
+            let linked =
+                read
+                |> CaseFile.linkFromDocument case.Subject fund LinkKind.Creditor document.Id reading ValueNone
+                |> expectOk
+                |> CaseFile.linkFromDocument case.Subject securitisation LinkKind.Creditor document.Id reading ValueNone
+                |> expectOk
+                |> CaseFile.linkFromDocument
+                    case.Subject
+                    lender
+                    (LinkKind.StatedRelationship "related lender")
+                    document.Id
+                    reading
+                    ValueNone
+                |> expectOk
 
-        let links =
-            linked.Links
-            |> List.filter (fun link -> link.Provenance = LinkProvenance.FilingDocument(document.Id, reading))
+            let links =
+                linked.Links
+                |> List.filter (fun link -> link.Provenance = LinkProvenance.FilingDocument(document.Id, reading))
 
-        Assert.Equal(3, links.Length)
-        Assert.All(links, (fun link -> Assert.True(CaseLink.isEvidenced link)))
-        Assert.All(links, (fun link -> Assert.Equal<string list>([ reading ], link.EvidenceIds)))
+            Assert.Equal(3, links.Length)
+            Assert.All(links, (fun link -> Assert.True(CaseLink.isEvidenced link)))
+            Assert.All(links, (fun link -> Assert.Equal<string list>([ reading ], link.EvidenceIds)))
 
-        let evidence = linked.Evidence |> List.find (fun item -> item.Id = reading)
-        Assert.Equal(EvidenceOrigin.FilingDocument, evidence.Origin)
-        Assert.Equal(ValueSome officer.By, evidence.Attribution |> ValueOption.map _.By)
-        Assert.Equal(ValueSome document.Id, evidence.DocumentId)
-        Assert.Equal(ValueSome(DateOnly(2021, 5, 6)), evidence.AsOf)
-        Assert.Equal(ValueSome "Page 12 names the creditors.", evidence.Raw)
+            let evidence = linked.Evidence |> List.find (fun item -> item.Id = reading)
+            Assert.Equal(EvidenceOrigin.FilingDocument, evidence.Origin)
+            Assert.Equal(ValueSome officer.By, evidence.Attribution |> ValueOption.map _.By)
+            Assert.Equal(ValueSome document.Id, evidence.DocumentId)
+            Assert.Equal(ValueSome(DateOnly(2021, 5, 6)), evidence.AsOf)
+            Assert.Equal(ValueSome "Page 12 names the creditors.", evidence.Raw)
 
-        // It closes that document's gap, and the other filing's stays.
-        let open' =
-            gapsOn "filing to read" linked |> List.filter (fun gap -> gap.ClosedBy.IsNone)
+            // It closes that document's gap, and the other filing's stays.
+            let open' =
+                gapsOn "filing to read" linked |> List.filter (fun gap -> gap.ClosedBy.IsNone)
 
-        Assert.Equal(1, open'.Length)
+            Assert.Equal(1, open'.Length)
+        runTail ()
     }
 
 [<Fact>]
@@ -1476,8 +1513,14 @@ type private RaisingReader() =
 /// A filing register whose document answer is scripted.
 type private FilingScript(document: Result<DocumentFile voption, RegistryFailure>) =
     interface IFilingRegister with
-        member _.Register = "Script"
-        member _.Jurisdictions = [ gb ]
+        member _.Coverage =
+            RegistryCoverage.create
+                "Script"
+                [ gb ]
+                AccessCost.Free
+                (RateLimitPolicy.NotPublished(1, TimeSpan.FromSeconds 1.))
+                "None stated"
+
         member _.FilingsAsync(_, _) = failwith "unused"
         member _.InsolvencyAsync(_, _) = failwith "unused"
         member _.EstablishmentsAsync(_, _) = failwith "unused"
@@ -1723,6 +1766,21 @@ let ``scenario 4: a virtual address, nominal capital and a past-due verification
                 Assert.DoesNotContain(word, words)
 
             Assert.NotEmpty flag.Source
+    }
+
+[<Fact>]
+let ``a capital filing is no constitutional document and needs no reading`` () : Task =
+    task {
+        let filing =
+            """{"transaction_id":"T1","category":"capital","type":"SH03","date":"2020-01-01","description":"capital-return-purchase-own-shares"}"""
+
+        use handler =
+            new FakeHandler(companiesHouse (Map [ "00000031", (profile "00000031" "X PLC" "", [], [], [ filing ]) ]))
+
+        let! case = Investigation.openAsync (chSources handler) options (start "00000031") ct
+        let document = case.Documents |> List.exactlyOne
+        Assert.False(CaseDocument.isHighlighted document)
+        Assert.Empty(gapsOn "filing to read" case)
     }
 
 [<Fact>]
@@ -2193,6 +2251,8 @@ let ``a reporting exception and no parent at all are gaps, and several LEIs aren
         use noLei = new FakeHandler(gleif Map.empty Map.empty Map.empty)
         let! none = run noLei
         Assert.Empty(gapsOn "LEI cross-check" none)
+        // An answer holding no record is kept as evidence, so the case shows GLEIF was asked.
+        Assert.Contains(none.Evidence, (fun item -> item.Origin = EvidenceOrigin.CrossCheck && item.Facts.IsEmpty))
     }
 
 [<Fact>]
@@ -2850,4 +2910,109 @@ let ``two owners with no name are two entities, each with its own link`` () : Ta
         let owners = case.Links |> List.filter (fun link -> link.Kind = LinkKind.Owner)
         Assert.Equal(2, owners.Length)
         Assert.Equal(2, owners |> List.map _.To |> List.distinct |> List.length)
+    }
+
+[<Fact>]
+let ``GLEIF is asked again with the number as the register wrote it when the number as asked finds nothing`` () : Task =
+    task {
+        let register =
+            ScriptedRegistry("Zedland", gb, Map [ "1234567", entry (baseCompany "1 234 567" "SUB LTD" gb) ])
+
+        use handler =
+            new FakeHandler(
+                gleif (Map [ "1 234 567", [ gleifRecord lei1 "SUB LTD" "1 234 567" "GB" ] ]) Map.empty Map.empty
+            )
+
+        let! case =
+            Investigation.openAsync
+                (gleifSources handler [ register ])
+                options
+                {
+                    CaseId = "C"
+                    Number = "1234567"
+                    Jurisdiction = gb
+                    NameGiven = "SUB LTD"
+                }
+                ct
+
+        let subject = case.Entities |> List.find (fun entity -> entity.Key = case.Subject)
+        Assert.Contains(EntityIdentity.Lei lei1, subject.Identities)
+    }
+
+[<Fact>]
+let ``a downloaded file that states no date of its own is a data date gap, even downloaded today`` () : Task =
+    task {
+        let path = IO.Path.Combine(__SOURCE_DIRECTORY__, "Fixtures", "brcko-opendata.xml")
+        use stream = new IO.MemoryStream(IO.File.ReadAllBytes path)
+
+        let! built =
+            BulkSources.bosniaBrckoAsync stream { DownloadedAt = at; AsOf = ValueNone } ct
+
+        let registry =
+            built
+            |> Result.defaultWith (RegistryFailure.describe >> failwith)
+
+        let! case = openOn [ registry ] "1-369" (Jurisdiction.ofCode "BA-BRC")
+        let gap = gapsOn "data date" case |> List.exactlyOne
+        Assert.Contains("states no date of its own", gap.Detail)
+    }
+
+[<Fact>]
+let ``a filing history read only in part is a gap naming how many were read`` () : Task =
+    task {
+        let total = Api.FilingHistory.MostRead + 1
+        let inner = companiesHouse (Map [ "00000021", (filedCompany, [], [], []) ])
+
+        use handler =
+            new FakeHandler(fun call ->
+                if Uri(call.Uri).AbsolutePath.EndsWith "/filing-history" then
+                    let start = startIndexOf call
+                    let size = min 100 (total - start)
+
+                    ok (
+                        listJson
+                            "total_count"
+                            total
+                            [
+                                for n in start .. start + size - 1 ->
+                                    $"""{{"transaction_id":"t{n}","category":"accounts"}}"""
+                            ]
+                    )
+                else
+                    inner call)
+
+        let! case = Investigation.openAsync (chSources handler) options (start "00000021") ct
+        let gap = case.Gaps |> List.find (fun item -> item.Subject = "older filings")
+        Assert.Equal($"The newest {Api.FilingHistory.MostRead} of {total} filings were read", gap.Detail)
+        Assert.Equal(Api.FilingHistory.MostRead, case.Documents.Length)
+    }
+
+[<Fact>]
+let ``a corporate owner whose number reads N/A is followed by name, never by that number`` () : Task =
+    task {
+        let register =
+            withOwnerAnswer (
+                Ok(
+                    Available
+                        {
+                            Owners = [ ownerOf (registration "FAR INC" "N/A" "United States") ]
+                            Statements = []
+                            Gaps = []
+                        }
+                )
+            )
+
+        let! case = openOn [ register ] "1" zz
+        let entity = case.Entities |> List.find (fun item -> item.Name = "FAR INC")
+        Assert.DoesNotContain("N/A", entity.Key)
+
+        Assert.DoesNotContain(
+            entity.Identities,
+            (fun identity ->
+                match identity with
+                | EntityIdentity.OnRegister(_, _, number) -> number = "N/A"
+                | _ -> false)
+        )
+
+        Assert.Equal<string list>([ "1" ], register.Calls)
     }

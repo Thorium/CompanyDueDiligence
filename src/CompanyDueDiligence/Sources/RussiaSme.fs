@@ -220,7 +220,7 @@ module internal RussiaSme =
                     | ValueNone -> struct (stated, skipped))
                 (struct (ValueNone, 0))
 
-        BulkRegistry(
+        new BulkRegistry(
             coverage,
             normalNumber,
             invalidNumber,

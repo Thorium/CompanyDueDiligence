@@ -139,6 +139,36 @@ let ``a company Companies House doesn't hold is ValueNone, not a failure`` () : 
     }
 
 [<Fact>]
+let ``a 404 without Companies House's own not-found error isn't a company it doesn't hold`` () : Task =
+    task {
+        for body in
+            [
+                ""
+                "<html>Not Found</html>"
+                """{"errors":[{"error":"invalid-path"}]}"""
+                """{"message":"No static resource company/00000006."}"""
+            ] do
+            use handler = new FakeHandler(fun _ -> answer 404 body)
+
+            match! Api.Companies.getAsync (clientWith handler) "00000006" ct with
+            | Error(ApiError(404, _)) -> ()
+            | other -> failwith $"%A{other}"
+    }
+
+[<Fact>]
+let ``the sandbox's not-found message is a company it doesn't hold`` () : Task =
+    task {
+        let body =
+            """{"timestamp":"2026-11-08T22:02:44.959254075","message":"404 NOT_FOUND \"Resource not found for company profile 00000006\"","request_id":"r"}"""
+
+        use handler = new FakeHandler(fun _ -> answer 404 body)
+
+        match! Api.Companies.getAsync (clientWith handler) "00000006" ct with
+        | Ok ValueNone -> ()
+        | other -> failwith $"%A{other}"
+    }
+
+[<Fact>]
 let ``a held company is ValueSome`` () : Task =
     task {
         use handler = new FakeHandler(fun _ -> ok company)

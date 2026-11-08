@@ -1,7 +1,7 @@
 /// Task-based Companies House calls. Each returns Ok, with ValueNone for a 404, or Error CompaniesHouseFailure; cancelling the token throws.
 /// A 404 on a list or a company's sub-resource says nothing is held at that address, which doesn't tell a company without records from a
 /// number that doesn't exist: Companies.getAsync does.
-module CompanyDueDiligence.CompaniesHouse.Api
+module internal CompanyDueDiligence.CompaniesHouse.Api
 
 open System
 open System.Globalization
@@ -153,7 +153,9 @@ let private sendKeyed (client: CompaniesHouseClient) (prepare: unit -> HttpReque
 
     attempt pacer.Retries
 
-let private getAt
+/// A GET whose 404 is ValueNone when notFound accepts its body, else ApiError.
+let private getAtWith
+    (notFound: byte array -> bool)
     (client: CompaniesHouseClient)
     (uri: unit -> Uri)
     (parse: JsonElement -> 'T)
@@ -174,14 +176,43 @@ let private getAt
 
                 return
                     match int response.StatusCode with
-                    | 404 -> Ok ValueNone
+                    | 404 when notFound body -> Ok ValueNone
                     | _ when response.IsSuccessStatusCode ->
                         read (int response.StatusCode) body parse |> Result.map ValueSome
                     | _ -> Error(refusal response body)
         })
 
+let private getAt client uri parse ct =
+    getAtWith (fun _ -> true) client uri parse ct
+
 let private get client (path: string) parse ct =
     getAt client (fun () -> Uri(client.Endpoints.Api, path)) parse ct
+
+/// Companies House's own not-found answer: an errors list naming an error ending in "not-found", such as company-profile-not-found, or a
+/// message holding "Resource not found for company profile", as the sandbox answered on 2026-11-08. A 404 of another body, as a gateway or a
+/// wrong endpoint answers, isn't a statement that the company doesn't exist.
+let private ownNotFound (body: byte array) =
+    try
+        use document = JsonDocument.Parse(ReadOnlyMemory<byte> body)
+        let root = document.RootElement
+
+        match root.ValueKind with
+        | JsonValueKind.Object ->
+            match root.TryGetProperty "errors", root.TryGetProperty "message" with
+            | (true, errors), _ when errors.ValueKind = JsonValueKind.Array ->
+                errors.EnumerateArray()
+                |> Seq.exists (fun error ->
+                    error.ValueKind = JsonValueKind.Object
+                    && (match error.TryGetProperty "error" with
+                        | true, name when name.ValueKind = JsonValueKind.String ->
+                            name.GetString().EndsWith("not-found", StringComparison.Ordinal)
+                        | _ -> false))
+            | _, (true, message) when message.ValueKind = JsonValueKind.String ->
+                message.GetString().Contains("Resource not found for company profile", StringComparison.Ordinal)
+            | _ -> false
+        | _ -> false
+    with :? JsonException ->
+        false
 
 /// Any Public Data API path this module has no function for, such as "company/00000006/exemptions": relative, with its values already escaped.
 /// The element is a copy that outlives the call. A path that leaves the client's endpoints is InvalidRequest.
@@ -243,40 +274,71 @@ module Paging =
     [<Literal>]
     let MaxPages = 100
 
-    /// The items, in order, and the counts the list stated. ValueNone when the first page is a 404.
+    /// A list as far as it was read: its items in order, the counts and total it stated, and whether every item was read.
+    type private Read<'T> =
+        {
+            Items: 'T list
+            Counts: ListCounts voption
+            Total: int
+            Complete: bool
+        }
+
+    /// The items, in order, up to most of them. ValueNone when the first page is a 404.
     let rec private follow
         (fetch: int -> int -> Task<Result<Page<'T> voption, CompaniesHouseFailure>>)
         (maxPages: int)
+        (most: int)
         (calls: int)
         (start: int)
         (seen: Set<string>)
         (pages: 'T list list)
         (first: Page<'T> voption)
-        : Task<Result<('T list * ListCounts voption) voption, CompaniesHouseFailure>> =
-        let finished counts =
-            Ok(ValueSome(pages |> List.rev |> List.concat, counts))
+        : Task<Result<Read<'T> voption, CompaniesHouseFailure>> =
+        let read (listed: Page<'T>) complete =
+            Ok(
+                ValueSome
+                    {
+                        Items = pages |> List.rev |> List.concat
+                        Counts = listed.Counts
+                        Total = listed.Total
+                        Complete = complete
+                    }
+            )
+
+        let finished listed = read listed true
 
         task {
             match first with
+            | ValueSome listed when start >= most && start < listed.Total -> return read listed false
             | ValueSome listed when calls >= maxPages -> return Error(ListTooLong(calls, start, listed.Total))
             | _ ->
-                match! fetch start PageSize with
+                match!
+                    fetch
+                        start
+                        (if most - start < PageSize then
+                             max 1 (most - start)
+                         else
+                             PageSize)
+                with
                 | Error failure -> return Error failure
                 | Ok ValueNone ->
                     return
                         match first with
                         | ValueNone -> Ok ValueNone
-                        | ValueSome listed when start >= listed.Total -> finished listed.Counts
+                        | ValueSome listed when start >= listed.Total -> finished listed
                         | ValueSome listed -> Error(IncompleteList(start, listed.Total))
                 | Ok(ValueSome page) ->
                     let listed = first |> ValueOption.defaultValue page
 
-                    if page.Total <> listed.Total || page.Counts <> listed.Counts then
+                    // At its total the officer list answers no items and a total of 0, as the sandbox did on 2026-11-08.
+                    if first.IsSome && page.Items.IsEmpty && page.Total = 0 && start >= listed.Total then
+                        return finished listed
+                    elif page.Total <> listed.Total || page.Counts <> listed.Counts then
                         return Error(InconsistentList(start, "the total or counts changed between pages"))
                     else
                         match page.Items with
                         | [] when start < page.Total -> return Error(IncompleteList(start, page.Total))
-                        | [] -> return finished page.Counts
+                        | [] -> return finished page
                         | _ when page.ItemsRaw |> List.forall seen.Contains -> return Error(RepeatedPage start)
                         | _ when page.ItemsRaw |> List.exists seen.Contains ->
                             return Error(InconsistentList(start, "an item moved onto a later page"))
@@ -287,6 +349,7 @@ module Paging =
                                 follow
                                     fetch
                                     maxPages
+                                    most
                                     (calls + 1)
                                     (start + items.Length)
                                     (Set.union seen (Set.ofList page.ItemsRaw))
@@ -303,8 +366,25 @@ module Paging =
             if maxPages < 1 then
                 return Error(InvalidRequest "maxPages must be positive")
             else
-                let! result = follow fetch maxPages 0 0 Set.empty [] ValueNone
-                return result |> Result.map (ValueOption.map fst)
+                let! result = follow fetch maxPages Int32.MaxValue 0 0 Set.empty [] ValueNone
+                return result |> Result.map (ValueOption.map _.Items)
+        }
+
+    /// The first items of the list, at most most of them, in at most MaxPages calls, with the total the list states and whether that was all of it.
+    /// ValueNone when the first page is a 404. The same checks as allUpToAsync apply to the pages read.
+    let firstAsync
+        (most: int)
+        (fetch: int -> int -> Task<Result<Page<'T> voption, CompaniesHouseFailure>>)
+        : Task<Result<('T list * int * bool) voption, CompaniesHouseFailure>> =
+        task {
+            if most < 1 then
+                return Error(InvalidRequest "most must be positive")
+            else
+                let! result = follow fetch MaxPages most 0 0 Set.empty [] ValueNone
+
+                return
+                    result
+                    |> Result.map (ValueOption.map (fun read -> read.Items, read.Total, read.Complete))
         }
 
     /// allUpToAsync with MaxPages.
@@ -318,12 +398,15 @@ module Paging =
         (fetch: int -> int -> Task<Result<Page<'T> voption, CompaniesHouseFailure>>)
         : Task<Result<'T list voption, CompaniesHouseFailure>> =
         task {
-            match! follow fetch MaxPages 0 0 Set.empty [] ValueNone with
+            match! follow fetch MaxPages Int32.MaxValue 0 0 Set.empty [] ValueNone with
             | Error failure -> return Error failure
             | Ok ValueNone -> return Ok ValueNone
-            | Ok(ValueSome(items, ValueNone)) ->
+            | Ok(ValueSome { Items = items; Counts = ValueNone }) ->
                 return Error(InconsistentList(items.Length, "the list states no counts"))
-            | Ok(ValueSome(items, ValueSome counts)) ->
+            | Ok(ValueSome {
+                               Items = items
+                               Counts = ValueSome counts
+                           }) ->
                 let ended = items |> List.filter isEnded |> List.length
 
                 return
@@ -337,9 +420,16 @@ module Paging =
 
 module Companies =
 
-    /// The company's profile; ValueNone when Companies House holds no such number. A number that can't be one is InvalidRequest.
+    /// The company's profile; ValueNone when Companies House answers its own not-found error, and a 404 of another body ApiError. A number
+    /// that can't be one is InvalidRequest.
     let getAsync (client: CompaniesHouseClient) (number: string) (ct: CancellationToken) =
-        withNumber number (fun number -> get client $"company/{number}" Parse.companyProfile ct)
+        withNumber number (fun number ->
+            getAtWith
+                ownNotFound
+                client
+                (fun () -> Uri(client.Endpoints.Api, $"company/{number}"))
+                Parse.companyProfile
+                ct)
 
 module Search =
 
@@ -630,6 +720,14 @@ module FilingHistory =
 
     let allAsync client number categories ct =
         Paging.allAsync (fun start size -> pageAsync client number categories start size ct)
+
+    /// The most filings recentAsync reads: ten calls. BP P.L.C. had 15,553 filings on 2026-11-08; the figure itself is a choice made without data.
+    [<Literal>]
+    let MostRead = 1000
+
+    /// The newest filings, at most MostRead of them, with the total the list states and whether that was all of them. The list is newest first.
+    let recentAsync client number categories ct =
+        Paging.firstAsync MostRead (fun start size -> pageAsync client number categories start size ct)
 
 /// Filed documents. The Document API answers a content request with a 302 to a signed URL on another host. The first hop carries the
 /// key; the second goes through a client with no key to send. Nothing else follows redirects.

@@ -5,6 +5,7 @@ open System.Globalization
 open System.IO
 open System.Text
 open System.Text.Json
+open System.Text.Json.Nodes
 open Microsoft.FSharp.Reflection
 
 /// Why stored JSON couldn't be read as a case file. It holds no text from the file except field and case names.
@@ -16,7 +17,8 @@ type CaseJsonRefused =
 
 /// A case file as JSON, for the host to store. Records are objects, a ValueNone is left out, and a union is {"case":"Name","fields":[...]}, or its
 /// name alone when it holds nothing. Reading is strict: a missing field, an unknown one, or an unknown case refuses the whole file, because a host re-saving
-/// what it only partly read would lose the rest.
+/// what it only partly read would lose the rest. A file of an older schema version is upgraded first, one version at a time, by the steps in
+/// upgrades; a schema change raises CaseFile.CurrentSchemaVersion and adds the step from the version before, filling what the new version adds.
 module CaseJson =
 
     exception private Shape of string
@@ -29,6 +31,7 @@ module CaseJson =
 
     let rec private write (writer: Utf8JsonWriter) (kind: Type) (value: obj) : unit =
         match value with
+        | null when kind = typeof<string> -> raise (Shape "A text field is null")
         | :? string as text -> writer.WriteStringValue text
         | :? int as number -> writer.WriteNumberValue number
         | :? decimal as number -> writer.WriteNumberValue number
@@ -234,40 +237,78 @@ module CaseJson =
         else
             raise (Shape $"The type {kind.Name} can't be read")
 
-    /// The case file as UTF-8 JSON text, raw answers included. It can hold personal data, so it needs the care of the case itself.
+    /// The case file as UTF-8 JSON text, raw answers included. It can hold personal data, so it needs the care of the case itself. A case that
+    /// can't be written, such as one holding a null text, raises ArgumentException.
     let toJson (case: CaseFile) =
         use stream = new MemoryStream()
         use writer = new Utf8JsonWriter(stream)
-        write writer typeof<CaseFile> (box case)
+
+        try
+            write writer typeof<CaseFile> (box case)
+        with Shape reason ->
+            raise (ArgumentException($"The case can't be written: {reason}", nameof case))
+
         writer.Flush()
         Encoding.UTF8.GetString(stream.ToArray())
 
-    /// A case file from stored JSON. A file of another schema version, or one that doesn't have this shape in every part, is refused whole.
-    let ofJson (json: string) : Result<CaseFile, CaseJsonRefused> =
+    /// The steps that upgrade a stored case, by the version each starts from: the step for n turns a file of version n into one of n + 1,
+    /// SchemaVersion included. Version 1 is the first, so there are none yet.
+    let internal upgrades: Map<int, JsonObject -> JsonObject> = Map.empty
+
+    /// ofJson with the given upgrade steps and current version.
+    let internal ofJsonWith
+        (steps: Map<int, JsonObject -> JsonObject>)
+        (current: int)
+        (json: string)
+        : Result<CaseFile, CaseJsonRefused> =
         try
-            use document = JsonDocument.Parse(if isNull json then "" else json)
-            let root = document.RootElement
+            let root =
+                match JsonNode.Parse(if isNull json then "" else json) with
+                | :? JsonObject as root -> ValueSome root
+                | _ -> ValueNone
 
-            let version =
-                if root.ValueKind <> JsonValueKind.Object then
-                    ValueNone
-                else
-                    match root.TryGetProperty "SchemaVersion" with
-                    | true, value when value.ValueKind = JsonValueKind.Number ->
-                        match value.TryGetInt32() with
-                        | true, number -> ValueSome number
-                        | _ -> ValueNone
+            let versionOf (root: JsonObject) =
+                match root["SchemaVersion"] with
+                | :? JsonValue as value when value.GetValueKind() = JsonValueKind.Number ->
+                    match value.TryGetValue<int>() with
+                    | true, number -> ValueSome number
                     | _ -> ValueNone
+                | _ -> ValueNone
 
-            if version <> ValueSome CaseFile.CurrentSchemaVersion then
-                Error(CaseJsonRefused.WrongVersion version)
-            else
-                Ok(read typeof<CaseFile> root :?> CaseFile)
+            // Each step from the file's version up to the current one; a missing step, or a version past the current, refuses the file.
+            let rec upgrade (root: JsonObject) =
+                match versionOf root with
+                | ValueSome version when version = current -> Ok root
+                | ValueSome version when version < current ->
+                    match steps.TryFind version with
+                    | Some step ->
+                        let next = step root
+
+                        if versionOf next = ValueSome(version + 1) then
+                            upgrade next
+                        else
+                            Error(CaseJsonRefused.WrongVersion(ValueSome version))
+                    | None -> Error(CaseJsonRefused.WrongVersion(ValueSome version))
+                | version -> Error(CaseJsonRefused.WrongVersion version)
+
+            match root with
+            | ValueNone -> Error(CaseJsonRefused.WrongVersion ValueNone)
+            | ValueSome root ->
+                upgrade root
+                |> Result.map (fun upgraded ->
+                    use document = JsonDocument.Parse(upgraded.ToJsonString())
+                    read typeof<CaseFile> document.RootElement :?> CaseFile)
         with
         | Shape reason -> Error(CaseJsonRefused.WrongShape reason)
         | :? JsonException as error -> Error(CaseJsonRefused.NotJson $"Line {error.LineNumber}")
         | :? FormatException -> Error(CaseJsonRefused.WrongShape "A value doesn't have the expected form")
         | :? InvalidOperationException -> Error(CaseJsonRefused.WrongShape "A value doesn't have the expected type")
+        | :? ArgumentException -> Error(CaseJsonRefused.WrongShape "A name is held twice in one object")
+
+    /// A case file from stored JSON. A file of an older schema version is upgraded first; one of a newer version, of a version no step
+    /// reaches, or one that doesn't have this shape in every part, is refused whole.
+    let ofJson (json: string) : Result<CaseFile, CaseJsonRefused> =
+        ofJsonWith upgrades CaseFile.CurrentSchemaVersion json
 
 /// A plain export for an audit file.
 module CaseExport =

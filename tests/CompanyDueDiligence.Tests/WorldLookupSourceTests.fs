@@ -492,7 +492,7 @@ let ``absence from Colombia's extract proves nothing, and two rows aren't told a
         | NotAvailable reason -> Assert.Contains("proves nothing", reason)
         | other -> failwith $"%A{other}"
 
-        let row = (fixture "colombia-active.json").Trim().TrimStart('[').TrimEnd(']')
+        let row = (fixture "colombia-active.json").Trim().TrimStart('[').TrimEnd ']'
         use two = new FakeHandler(fun _ -> ok $"[{row},{row}]")
         let! evidence = findIn (Sources.colombia (connectionOver two)) "899999068" co
 
@@ -760,7 +760,7 @@ let ``a RUT's check character is modulo 11`` (digits: string, expected: char) =
 [<Fact>]
 let ``a Chilean row without a name keeps its RUT, and one RUT in two files isn't told apart`` () : Task =
     task {
-        let header = (fixture "chile-2013.csv").Split('\n').[0].TrimEnd('\r')
+        let header = (fixture "chile-2013.csv").Split('\n').[0].TrimEnd '\r'
 
         let unnamed =
             "39452;76313428-8;;25-10-2013;25-10-2013;25-10-2013;2013;Octubre;PUENTE ALTO;13;EIRL;CONSTITUCIÓN;800000;;"
@@ -1108,7 +1108,7 @@ let ``each source declares what it costs, its pace and its licence`` () =
 
     let connection = connectionOver handler
     Assert.Contains("usage notice", (Sources.taiwan connection).Coverage.Licence)
-    Assert.Contains("Not run live", (Sources.kenya connection kraCredentials).Coverage.Licence)
+    Assert.Contains("approved developers", (Sources.kenya connection kraCredentials).Coverage.Licence)
 
     match (Sources.costaRica connection).Coverage.RateLimit with
     | RateLimitPolicy.Published(10, per, source) ->

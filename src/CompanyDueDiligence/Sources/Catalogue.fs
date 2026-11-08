@@ -3,38 +3,110 @@ namespace CompanyDueDiligence
 /// The sources this package reads, over one connection.
 module Sources =
 
+    /// The Malta Business Registry (MT), by number: a letter prefix and digits, such as C 1234. A number without its prefix isn't sent. Only the
+    /// registry's own not-found answer says a number isn't held.
     let malta connection : ICompanyRegistry = MaltaRegistry connection
+
+    /// Recherche d'entreprises (FR), by nine-digit SIREN. Not found is NotAvailable, as non-diffusible companies are left out.
     let france connection : ICompanyRegistry = FranceRegistry connection
+
+    /// PRH/YTJ open data (FI), by Business ID: seven digits, a hyphen and a check digit.
     let finland connection : ICompanyRegistry = FinlandRegistry connection
+
+    /// The Texas Comptroller's franchise taxpayers (US-TX), by Secretary of State file number of up to ten digits, or taxpayer number of eleven.
+    /// Not the Secretary of State's register: a number not found is NotAvailable.
     let texas connection : ICompanyRegistry = TexasRegistry connection
+
+    /// The Colorado Department of State's business entities (US-CO), by entity ID: the year and seven digits, such as 20131234567. A daily
+    /// copy, so absence is NotAvailable.
     let colorado connection : ICompanyRegistry = ColoradoRegistry connection
+
+    /// The Connecticut Secretary of the State's business registry (US-CT), by business ID of up to seven digits, such as 0645848. Absence is
+    /// NotAvailable.
     let connecticut connection : ICompanyRegistry = ConnecticutRegistry connection
+
+    /// The New York Department of State's corporations (US-NY), by DOS ID of up to eight digits, such as 4424185. A search is never complete.
     let newYork connection : ICompanyRegistry = NewYorkRegistry connection
+
+    /// The Oregon Secretary of State's active businesses (US-OR), by registry number of up to nine digits, such as 10003093. Active businesses
+    /// only, so absence is NotAvailable and a search is never complete.
     let oregon connection : ICompanyRegistry = OregonRegistry connection
+
+    /// The Pennsylvania Department of State's registered businesses (US-PA), by filing number of up to ten digits, such as 0000000378. It has
+    /// no status column, so standing is Registered with no word, and holds active registrations only, so a search is never complete.
     let pennsylvania connection : ICompanyRegistry = PennsylvaniaRegistry connection
+
+    /// The District of Columbia DLCP Corporations Division (US-DC), by file number: digits with an optional letter, such as C00007209052.
     let districtOfColumbia connection : ICompanyRegistry = DistrictOfColumbiaRegistry connection
+
+    /// Brønnøysund Enhetsregisteret (NO), by nine-digit organisation number, the last a modulus 11 check digit.
     let norway connection : ICompanyRegistry = NorwayRegistry connection
+
+    /// ARES (CZ), by eight-digit IČO. ARES leaves out entities deleted from the register, so not found is NotAvailable and a search is never
+    /// complete.
     let czechia connection : ICompanyRegistry = CzechiaRegistry connection
+
+    /// RPO (SK), by eight-digit IČO. A nightly replica, so no result is NotAvailable.
     let slovakia connection : ICompanyRegistry = SlovakiaRegistry connection
+
+    /// CRO open data (IE), by company number of up to seven digits. A daily snapshot, so absence is NotAvailable.
     let ireland connection : ICompanyRegistry = IrelandRegistry connection
+
+    /// KRS (PL), by KRS number of up to ten digits, not all zero. The register masks people's names, so officers and owners are Withheld.
     let poland connection : ICompanyRegistry = PolandRegistry connection
 
     /// The Swiss UID register (BFS). Zefix, behind credentials, gives the commercial register's own status. Both cover CH: an investigation reads
     /// each covering register in CaseSources.Registries order, takes the first that holds the company as its record, and keeps the others' answers as evidence.
     let switzerland connection : ICompanyRegistry = SwitzerlandRegistry connection
 
+    /// OrgBook BC (CA-BC), by BC Registries number: a prefix such as BC, A or FM and seven digits, such as BC0772006. Absence is NotAvailable.
     let britishColumbia connection : ICompanyRegistry = BritishColumbiaRegistry connection
+
+    /// The Israeli Companies Registrar on data.gov.il (IL), by nine-digit company number. A daily copy, so absence is NotAvailable.
     let israel connection : ICompanyRegistry = IsraelRegistry connection
+
+    /// ACRA entities on data.gov.sg (SG), by UEN: eight or nine digits and a letter, or a T, S or R form such as T08LL0001A. A monthly copy, so
+    /// absence is NotAvailable.
     let singapore connection : ICompanyRegistry = SingaporeRegistry connection
+
+    /// The KVK open dataset Basis Bedrijfsgegevens (NL), by eight-digit KVK number. It publishes no name and holds only BVs and NVs, so a 404
+    /// is NotAvailable.
     let netherlands connection : ICompanyRegistry = NetherlandsRegistry connection
+
+    /// The Latvian Register of Enterprises on data.gov.lv (LV), by registration number: eleven digits, or nine for a subject without one. A
+    /// daily copy, so absence is NotAvailable.
     let latvia connection : ICompanyRegistry = LatviaRegistry connection
+
+    /// MOEA company registration open data (TW), by eight-digit UBN passing the Ministry of Finance's check. A UBN not held answers an empty
+    /// 200, read as NotAvailable.
     let taiwan connection : ICompanyRegistry = TaiwanRegistry connection
+
+    /// The RUES extract on datos.gov.co (CO), by NIT of five to ten digits, with its check digit if given, or by chamber code and matrícula, such
+    /// as 04/1291197. Absence is NotAvailable.
     let colombia connection : ICompanyRegistry = ColombiaRegistry connection
+
+    /// The Ministerio de Hacienda's taxpayer situation (CR), by cédula jurídica: ten digits starting 2, 3 or 4. A tax registration, not the
+    /// Registro Nacional; a 404 is NotAvailable.
     let costaRica connection : ICompanyRegistry = CostaRicaRegistry connection
 
     /// KRA's PIN checker, with the consumer key and secret of a GavaConnect app.
     let kenya (connection: SourceConnection) (credentials: ClientCredentials) : ICompanyRegistry =
         KenyaRegistry(connection, credentials)
+
+    /// Companies House, with a key from its Developer Hub: of type "API Key" on a server, or "JavaScript" in a browser. The client paces its calls to the
+    /// guide's 600 in five minutes per key, so make one per key and keep it; each HTTP request is limited to 20 seconds. Its filings, insolvency and
+    /// documents are an IFilingRegister for CaseSources.Filings, and its officer search an IPersonSearch.
+    let companiesHouse (connection: SourceConnection) (key: SourceKey) : CompaniesHouseRegistry =
+        CompaniesHouseRegistry(
+            CompaniesHouse.CompaniesHouseClient(
+                {
+                    CompaniesHouse.Credentials.ApiKey = key.Value
+                },
+                CompaniesHouse.Endpoints.live,
+                connection.Handler,
+                ValueSome(System.TimeSpan.FromSeconds 20.)
+            )
+        )
 
     /// Corporations Canada, with an ISED API Store key. Federal corporations only: a province code is outside its coverage.
     let canada (connection: SourceConnection) (key: SourceKey) : ICompanyRegistry = CanadaRegistry(connection, key)
@@ -81,7 +153,8 @@ module Sources =
     let denmark (connection: SourceConnection) (credentials: ClientCredentials) : ICompanyRegistry =
         DenmarkRegistry(connection, credentials)
 
-    let gleif (connection: SourceConnection) = GleifCrossCheck connection
+    /// GLEIF, as the LEI cross-check for CaseSources.CrossCheck.
+    let gleif (connection: SourceConnection) : ILeiCrossCheck = GleifCrossCheck connection
 
 /// What the settings held for the sources behind a key.
 type KeyedSourceSettings =
@@ -130,14 +203,8 @@ module KeyedSources =
             Name = "Companies House"
             Settings = [ "CDD_COMPANIES_HOUSE_KEY" ]
             Build =
-                fun _ values ->
-                    CompaniesHouse.CompaniesHouseRegistry(
-                        CompaniesHouse.CompaniesHouseClient.Create(
-                            { ApiKey = List.head values },
-                            CompaniesHouse.Endpoints.live,
-                            TimeSpan.FromSeconds 20.
-                        )
-                    )
+                fun connection values ->
+                    Sources.companiesHouse connection (SourceKey(List.head values)) :> ICompanyRegistry
         }
 
     let private all =
@@ -526,15 +593,17 @@ module BulkIndexes =
         saveUkraineWith [] uo date directory ct
 
     /// Opens an index saveAsync wrote. It answers exactly as the registry it was written from, and holds the index's files open until it is
-    /// disposed: the registry is IDisposable. RequestRefused for a folder with no index, or one of another format or of a source this version
+    /// disposed. RequestRefused for a folder with no index, or one of another format or of a source this version
     /// doesn't know; UnreadableAnswer for one that is damaged or cut short.
-    let openAsync (directory: string) (ct: CancellationToken) : Task<Result<ICompanyRegistry, RegistryFailure>> =
+    let openAsync (directory: string) (ct: CancellationToken) : Task<Result<IBulkRegistry, RegistryFailure>> =
         ct.ThrowIfCancellationRequested()
 
         BulkStore.readManifest directory
         |> Result.bind (fun manifest ->
             match BulkSourceShape.tryNormal manifest.Source with
-            | ValueSome normal -> BulkStore.openWith directory normal manifest
+            | ValueSome normal ->
+                BulkStore.openWith directory normal manifest
+                |> Result.map (fun registry -> registry :?> IBulkRegistry)
             | ValueNone ->
                 Error(
                     RegistryFailure.RequestRefused

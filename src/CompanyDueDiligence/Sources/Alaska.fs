@@ -29,7 +29,7 @@ module internal Alaska =
                     "Shareholders, members, owners and partners named among the officials, with no shares; Alaska asks only for those holding 5% or more"
             Cost = AccessCost.Free
             RateLimit = RateLimitPolicy.NotPublished(1, TimeSpan.FromDays 1.)
-            Licence = "None stated"
+            Licence = "None found; the download page is behind a captcha"
         }
 
     let private numberRegex = Regex @"\A[0-9]{1,8}[A-Z]{0,2}\z"
@@ -400,7 +400,7 @@ module internal Alaska =
                 ValueNone
 
         let registry =
-            BulkRegistry(
+            new BulkRegistry(
                 coverage,
                 normalNumber,
                 invalidNumber,
@@ -419,4 +419,4 @@ module internal Alaska =
                 repeated
             )
 
-        BulkPartiesWithheld(registry, normalNumber, withheld, withheld)
+        new BulkPartiesWithheld(registry, normalNumber, withheld, withheld)

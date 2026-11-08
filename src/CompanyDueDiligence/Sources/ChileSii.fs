@@ -27,7 +27,7 @@ module internal ChileSii =
             Owners = Support.NotOffered "The nómina lists no partners or shareholders"
             Cost = AccessCost.Free
             RateLimit = RateLimitPolicy.NotPublished(1, TimeSpan.FromDays 1.)
-            Licence = "None stated; the SII disclaims the accuracy of the nómina"
+            Licence = "None stated; site terms: personal non-commercial use, reproduction needs SII's approval"
         }
 
     let invalidNumber =
@@ -273,7 +273,7 @@ module internal ChileSii =
             cell "RAZON_SOCIAL" (rowOf (Encoding.UTF8.GetString held))
             |> ValueOption.defaultValue ""
 
-        BulkRegistry(
+        new BulkRegistry(
             coverage,
             normalNumber,
             invalidNumber,

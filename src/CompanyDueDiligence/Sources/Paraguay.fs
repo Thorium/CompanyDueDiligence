@@ -23,7 +23,7 @@ module internal Paraguay =
             Owners = Support.NotOffered "The list names no owners"
             Cost = AccessCost.Free
             RateLimit = RateLimitPolicy.NotPublished(1, TimeSpan.FromDays 1.)
-            Licence = "None stated on DNIT's download page"
+            Licence = "None stated; the site says all rights reserved"
         }
 
     let private rucRegex = Regex @"\A([0-9]{1,8}[A-Z]?)(-([0-9]))?\z"

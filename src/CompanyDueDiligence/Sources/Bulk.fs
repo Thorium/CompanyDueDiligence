@@ -17,6 +17,12 @@ type BulkFileDate =
         AsOf: DateOnly voption
     }
 
+/// A register read from downloaded files. One opened from an index holds its files open until disposed; one built in memory holds nothing to
+/// release, and disposing it does nothing.
+type IBulkRegistry =
+    inherit ICompanyRegistry
+    inherit IDisposable
+
 /// One company as a downloaded file holds it. ValueNone for officers or owners means the file doesn't publish them.
 type internal BulkRecord =
     {
@@ -240,7 +246,7 @@ type internal BulkRegistry
 
     /// A register with no number repeated in its file.
     new(coverage, normal, invalidNumber, records, date, absence, officersNotOffered, owners) =
-        BulkRegistry(
+        new BulkRegistry(
             coverage,
             normal,
             invalidNumber,
@@ -254,6 +260,11 @@ type internal BulkRegistry
 
     /// How many companies the file held.
     member _.Count = records.Count
+
+    interface IBulkRegistry
+
+    interface IDisposable with
+        member _.Dispose() = ()
 
     interface IBulkContents with
         member _.Contents =
@@ -355,6 +366,14 @@ type internal BulkPartiesWithheld
         match inner key with
         | ValueSome reason -> ValueSome reason
         | ValueNone -> outer key
+
+    interface IBulkRegistry
+
+    interface IDisposable with
+        member _.Dispose() =
+            match inner with
+            | :? IDisposable as disposable -> disposable.Dispose()
+            | _ -> ()
 
     interface IBulkContents with
         member _.Contents =
@@ -511,12 +530,20 @@ type internal BulkAnswers
             | other -> other
 
         let inner =
-            BulkRegistry(coverage, normal, invalidNumber, rows.Held, date, absence, officersNotOffered, owners)
+            new BulkRegistry(coverage, normal, invalidNumber, rows.Held, date, absence, officersNotOffered, owners)
 
         let excluded =
             rows.Repeated.Count > 0 || not rows.Unreadable.IsEmpty || rows.WithoutNumber > 0
 
-        BulkAnswers(inner, normal, withheld, excluded, date, defaultArg keyAliases Seq.empty)
+        new BulkAnswers(inner, normal, withheld, excluded, date, defaultArg keyAliases Seq.empty)
+
+    interface IBulkRegistry
+
+    interface IDisposable with
+        member _.Dispose() =
+            match inner with
+            | :? IDisposable as disposable -> disposable.Dispose()
+            | _ -> ()
 
     interface IBulkContents with
         member _.Contents =

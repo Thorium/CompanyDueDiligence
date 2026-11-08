@@ -725,6 +725,12 @@ let ``registrations in several states of one company reach one home entity`` () 
 [<InlineData("CABA", "AR-C")>]
 [<InlineData("Brčko distrikt", "BA-BRC")>]
 [<InlineData("BRCKO", "BA-BRC")>]
+[<InlineData("Barbados", "BB")>]
+[<InlineData("Virgin Islands, British", "VG")>]
+[<InlineData("Côte d’Ivoire", "CI")>]
+[<InlineData("Korea, Democratic People's Republic of", "KP")>]
+[<InlineData("Türkiye", "TR")>]
+[<InlineData("Guinea-Bissau", "GW")>]
 let ``countries with sources and their subdivisions are placed, in English and native names``
     (wording: string, expected: string)
     =
@@ -752,3 +758,38 @@ let ``a bare two-letter code on a US or Canadian record is that country's state 
     Assert.Equal(ValueSome "CA-AB", within "CA-BC" [ "AB" ])
     Assert.Equal(ValueSome "DE", within "GB" [ "DE" ])
     Assert.Equal(ValueSome "MX", within "US-CO" [ "MX" ])
+
+[<Fact>]
+let ``a US state named within a register's or law's wording places the state, as Companies House writes them`` () =
+    let placed wordings =
+        JurisdictionWords.place (wordings |> List.map ValueSome)
+        |> ValueOption.map _.Code
+
+    Assert.Equal(
+        ValueSome "US-CA",
+        placed
+            [
+                "UNITED STATES"
+                "Secretary Of State, State Of California"
+                "General Corporation Law, State Of California"
+            ]
+    )
+
+    Assert.Equal(ValueSome "US-NY", placed [ "UNITED STATES"; "New York State Business Corporation Law 1963" ])
+    Assert.Equal(ValueSome "US-WV", placed [ "UNITED STATES"; "West Virginia Business Corporation Act" ])
+    Assert.Equal(ValueSome "US", placed [ "UNITED STATES"; "Laws of Texas and of New York" ])
+    Assert.Equal(ValueSome "US-DC", placed [ "UNITED STATES"; "Department of Licensing, Washington, D.C." ])
+    Assert.Equal(ValueSome "US-WA", placed [ "UNITED STATES"; "Secretary of State, Washington" ])
+    Assert.Equal(ValueNone, placed [ "Ministry of Justice of Georgia" ])
+
+[<Theory>]
+[<InlineData("N/A", false)>]
+[<InlineData("NONE", false)>]
+[<InlineData("0", false)>]
+[<InlineData("000-000", false)>]
+[<InlineData("", false)>]
+[<InlineData("C0382019", true)>]
+[<InlineData("B164962", true)>]
+[<InlineData("982 715 040", true)>]
+let ``a number field without a digit, or all zeros, holds no number`` (number: string, expected: bool) =
+    Assert.Equal(expected, Reading.isNumber number)

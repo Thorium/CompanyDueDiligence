@@ -5,7 +5,7 @@ open System.Globalization
 open System.Text
 
 /// Names in a comparable form, and the fuzzy comparison. No dependency beyond the base library.
-module NameMatching =
+module internal NameMatching =
 
     let private transliterated =
         [

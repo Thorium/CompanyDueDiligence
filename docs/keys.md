@@ -5,7 +5,7 @@ Fourteen sources need a free key or a user and secret. This file says, for each:
 - what approval it takes;
 - which setting it goes in.
 
-The steps come from each issuer's own pages as read on 2026-11-08. None of these keys has been used by this package yet: see the README's [Sources](https://github.com/Thorium/CompanyDueDiligence/blob/HEAD/README.md#lookups-behind-a-free-key). Where a step is marked unverified, the issuer's page couldn't be read or didn't say.
+The steps come from each issuer's own pages as read on 2026-11-08. Only the Companies House key has been used live, on 2026-11-08; see the README's [Sources](https://github.com/Thorium/CompanyDueDiligence/blob/HEAD/README.md#lookups-behind-a-free-key). Where a step is marked unverified, the issuer's page couldn't be read or didn't say.
 
 ## Setting them
 

@@ -264,7 +264,7 @@ let ``Connecticut joins the principals named as asked to their businesses`` () :
         Assert.Equal(ValueSome "Principal", result.Matches[1].Role)
         Assert.Equal(ValueSome "THE PARTNERSHIP FOR CONNECTICUT, INC.", result.Matches[2].CompanyName)
         Assert.Equal(ValueSome "Dissolved", result.Matches[2].CompanyStatus)
-        Assert.True(result.Matches |> List.forall (fun found -> found.Current = ValueNone))
+        Assert.True(result.Matches |> List.forall (fun found -> found.Current |> ValueOption.isNone))
         Assert.True(result.Complete)
         Assert.Equal(ValueNone, result.TotalMatches)
 

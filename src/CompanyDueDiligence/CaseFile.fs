@@ -16,6 +16,7 @@ type EntityIdentity =
     /// A name with nothing behind it yet, as with a person, or a company named in a filing. The context says where the name was seen.
     | NameOnly of name: string * context: string
 
+/// Keys and descriptions of identities.
 module EntityIdentity =
 
     /// A jurisdiction as a register's scope: GB for any part of the UK, and a US state as itself because each state has its own register.
@@ -74,12 +75,12 @@ type Attribution =
     }
 
 /// What a link is. HomeRecord points from a foreign registration or overseas record to the home record; ForeignRegistration from the home record to a
-/// registration elsewhere; UkEstablishment from the overseas company to its establishment; Owner, Officer and Parent from a company to that party.
+/// registration elsewhere; Establishment from a company to its branch or establishment registered elsewhere, such as a UK establishment; Owner, Officer and Parent from a company to that party.
 [<RequireQualifiedAccess>]
 type LinkKind =
     | HomeRecord
     | ForeignRegistration
-    | UkEstablishment
+    | Establishment
     | Owner
     | Officer
     | Parent
@@ -100,6 +101,7 @@ type LinkProvenance =
     /// An officer says so.
     | OperatorDeclared of Attribution
 
+/// A connection between two entities of the case, by their keys, with where it comes from.
 type CaseLink =
     {
         Id: string
@@ -112,6 +114,7 @@ type CaseLink =
         Note: string voption
     }
 
+/// Reading and describing links.
 module CaseLink =
 
     /// False for a link an officer declared with nothing behind it.
@@ -123,17 +126,19 @@ module CaseLink =
         | LinkProvenance.Vendor _
         | LinkProvenance.CrossCheck _ -> true
 
+    /// The kind in a few lower-case words, for a person to read.
     let describeKind kind =
         match kind with
         | LinkKind.HomeRecord -> "home record"
         | LinkKind.ForeignRegistration -> "foreign registration"
-        | LinkKind.UkEstablishment -> "UK establishment"
+        | LinkKind.Establishment -> "establishment"
         | LinkKind.Owner -> "owner"
         | LinkKind.Officer -> "officer"
         | LinkKind.Parent -> "parent"
         | LinkKind.Creditor -> "creditor"
         | LinkKind.StatedRelationship words -> $"stated relationship: {words}"
 
+    /// One line saying where a link comes from, for a person to read. A declared link says it is not evidenced.
     let describeProvenance provenance =
         match provenance with
         | LinkProvenance.Register register -> $"register: {register}"
@@ -185,6 +190,7 @@ type Fact =
     /// Anything else, by topic.
     | Other of topic: string * text: string
 
+/// One answer a source gave about one entity, kept with the facts read from it. A register saying it holds no such number is evidence too.
 type CaseEvidence =
     {
         Id: string
@@ -302,6 +308,7 @@ type CaseDocument =
         Link: string voption
     }
 
+/// Reading case documents.
 module CaseDocument =
 
     /// Insolvency and constitutional filings are the ones to read first.
@@ -311,6 +318,7 @@ module CaseDocument =
         | DocumentKind.Constitutional -> true
         | DocumentKind.Other _ -> false
 
+/// An officer's note, attributed. Notes are kept apart from evidence and raise no flag or gap.
 type CaseNote =
     {
         Id: string
@@ -358,6 +366,29 @@ type VendorCheck =
         Raw: string voption
     }
 
+/// Building vendor checks.
+module VendorCheck =
+
+    /// A vendor's check with no hits, gaps, facts or raw answer: add them with { VendorCheck.create ... with ... }.
+    let create
+        (vendor: string)
+        (product: string)
+        (reference: string)
+        (checkedAt: DateTimeOffset)
+        (outcomeWords: string)
+        : VendorCheck =
+        {
+            Vendor = vendor
+            Product = product
+            Reference = reference
+            CheckedAt = checkedAt
+            OutcomeWords = outcomeWords
+            Hits = []
+            Gaps = []
+            Facts = []
+            Raw = ValueNone
+        }
+
 /// One step of a path through the case's links.
 type LinkStep =
     {
@@ -385,6 +416,8 @@ type ReviewItem =
         Text: string
     }
 
+/// One case about one company. Change it through the CaseFile module, which keeps ids unique and references to entities, documents, evidence
+/// and gaps valid.
 type CaseFile =
     {
         /// The version of this shape, which CaseJson checks.
@@ -416,7 +449,7 @@ type CaseEditRefused =
     /// Who entered it, or its source, is blank.
     | NotAttributed
 
-/// The comparison of an entity's evidence across sources.
+/// The part of an entity's record a discrepancy compares across sources.
 [<RequireQualifiedAccess>]
 type DiscrepancyField =
     | Name
@@ -443,6 +476,7 @@ type DiscrepancyLabel =
     | Disagreement
     | DifferentKinds of explanation: string
 
+/// Two sources stating different values of one field of one entity, with both values and their evidence.
 type Discrepancy =
     {
         About: string
@@ -862,7 +896,7 @@ module Discrepancies =
             match link.Kind with
             | LinkKind.HomeRecord
             | LinkKind.ForeignRegistration
-            | LinkKind.UkEstablishment -> true
+            | LinkKind.Establishment -> true
             | _ -> false
 
         let rec spread (reached: Set<string>) =
@@ -933,9 +967,11 @@ type KnownAddressList =
         Addresses: KnownAddress list
     }
 
+/// Opening a case and changing it. A change that references something the case doesn't hold, or entry by hand without who and source, is
+/// refused with CaseEditRefused and leaves the case as it was.
 module CaseFile =
 
-    [<Literal>]
+    /// The schema version CaseJson writes; an older one is upgraded on reading.
     let CurrentSchemaVersion = 1
 
     let private nextId (prefix: string) (existing: string list) =
@@ -967,7 +1003,7 @@ module CaseFile =
         not (String.IsNullOrWhiteSpace who.By || String.IsNullOrWhiteSpace who.Source)
 
     /// Finds a gap's id for the same hole, so that reading twice doesn't list it twice.
-    let addGap (about: string voption) reach kind subject detail wouldClose (case: CaseFile) =
+    let internal addGap (about: string voption) reach kind subject detail wouldClose (case: CaseFile) =
         let same (gap: CaseGap) =
             gap.About = about
             && gap.Subject = subject
@@ -995,7 +1031,7 @@ module CaseFile =
             }
 
     /// Adds a flag, unless the same statement already stands on that entity.
-    let addFlag on kind statement source evidenceIds (case: CaseFile) =
+    let internal addFlag on kind statement source evidenceIds (case: CaseFile) =
         if
             case.Flags
             |> List.exists (fun flag -> flag.On = on && flag.Kind = kind && flag.Statement = statement)
@@ -1224,7 +1260,7 @@ module CaseFile =
             "Run Investigation.screen with the lists' downloaded text"
 
     /// Adds an entity, or merges what is new into the one with the same key. The first name seen stays.
-    let addEntity (entity: CaseEntity) (case: CaseFile) =
+    let internal addEntity (entity: CaseEntity) (case: CaseFile) =
         match case.Entities |> List.tryFind (fun known -> known.Key = entity.Key) with
         | None ->
             noteUnscreened
@@ -1335,6 +1371,7 @@ module CaseFile =
 
             Ok updated
 
+    /// An officer's note, on the entity with key about or, for ValueNone, on the case. Refused when who or its source is blank, or the entity isn't in the case.
     let addNote (about: string voption) (text: string) (who: Attribution) (case: CaseFile) =
         match about with
         | _ when not (attributed who) -> Error CaseEditRefused.NotAttributed

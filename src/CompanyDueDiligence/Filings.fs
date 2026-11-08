@@ -60,16 +60,25 @@ type InsolvencyProceeding =
 type DocumentFile =
     { ContentType: string; Content: byte[] }
 
-/// A register's filings beyond the common contract. Same rules as ICompanyRegistry: Available [] means the register says there are none.
-type IFilingRegister =
-    /// The name each answer gives as its Source.
-    abstract Register: string
-    abstract Jurisdictions: Jurisdiction list
+/// A company's filings, newest first, as far as the register's read went.
+type FilingHistory =
+    {
+        Filings: FiledDocument list
+        /// The count the register states, when it states one.
+        Total: int voption
+        /// True when every filing was read. False when the read stopped at the register's limit: the older ones weren't read.
+        Complete: bool
+    }
 
-    /// The company's filings, every page.
+/// A register's filings beyond the common contract. Same rules as ICompanyRegistry: Available with no filings and Complete means the register
+/// says there are none.
+type IFilingRegister =
+    /// What the register covers, as ICompanyRegistry.Coverage: its Registry is the name each answer gives as its Source.
+    abstract Coverage: RegistryCoverage
+
+    /// The company's filings, newest first, up to the register's read limit; Complete says whether that was all of them.
     abstract FilingsAsync:
-        number: string * ct: CancellationToken ->
-            Task<Result<Evidence<Availability<FiledDocument list>>, RegistryFailure>>
+        number: string * ct: CancellationToken -> Task<Result<Evidence<Availability<FilingHistory>>, RegistryFailure>>
 
     /// The insolvency cases on the company's record.
     abstract InsolvencyAsync:

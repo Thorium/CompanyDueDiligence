@@ -429,7 +429,7 @@ module internal Ukraine =
         (repeated: IReadOnlySet<string>)
         (date: BulkFileDate)
         : ICompanyRegistry =
-        BulkRegistry(
+        new BulkRegistry(
             coverage,
             normalCode,
             invalidNumber,

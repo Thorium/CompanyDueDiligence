@@ -173,7 +173,7 @@ module internal Chile =
             with :? DecoderFallbackException ->
                 BulkFile.fail "A file holds text that isn't UTF-8"
 
-        BulkRegistry(
+        new BulkRegistry(
             coverage,
             normalRut,
             "A RUT has seven or eight digits and a matching check character, as 78325555-3",

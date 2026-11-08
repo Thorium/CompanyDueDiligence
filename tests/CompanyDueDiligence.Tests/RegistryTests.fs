@@ -352,14 +352,24 @@ let ``a profile silent on its flags leaves them unconfirmed, and isn't good`` ()
         Assert.False(nothingAgainst company)
     }
 
-[<Theory; InlineData("has_insolvency_history"); InlineData("has_been_liquidated")>]
-let ``a profile silent on one insolvency flag leaves insolvency unconfirmed`` (flag: string) : Task =
+[<Fact>]
+let ``a profile silent on has_insolvency_history leaves insolvency unconfirmed`` () : Task =
     task {
-        let profile = profileJson.Replace($"\"{flag}\":false,", "")
+        let profile = profileJson.Replace("\"has_insolvency_history\":false,", "")
         Assert.NotEqual<string>(profileJson, profile)
         let! company = concernsOf profile
         Assert.Equal<CompanyConcern list>([ CompanyConcern.InsolvencyHistory ], company.Concerns.Unconfirmed)
         Assert.False(nothingAgainst company)
+    }
+
+[<Fact>]
+let ``a profile without the deprecated has_been_liquidated is settled by has_insolvency_history`` () : Task =
+    task {
+        let profile = profileJson.Replace("\"has_been_liquidated\":false,", "")
+        Assert.NotEqual<string>(profileJson, profile)
+        let! company = concernsOf profile
+        Assert.Empty(company.Concerns.Unconfirmed)
+        Assert.True(nothingAgainst company)
     }
 
 [<Fact>]
@@ -1064,5 +1074,107 @@ let ``a bad number through the contract is InvalidRequest, not not-found`` () : 
 
         match! (registryOver handler).TryFindAsync("123456", gb, ct) with
         | Error(RegistryFailure.InvalidRequest _) -> Assert.Empty handler.Calls
+        | other -> failwith $"%A{other}"
+    }
+
+let private filingItem (n: int) =
+    $"""{{"transaction_id":"t{n}","category":"accounts","date":"2020-01-01"}}"""
+
+/// Answers the officer list and filing history with empty lists, as Companies House does for a number it doesn't hold, and the profile with held.
+let private emptyLists (held: bool) (call: Call) =
+    if call.Target.Contains "/officers" then
+        ok (officersJson 0 0 [])
+    elif call.Target.Contains "/filing-history" then
+        ok (listJson "total_count" 0 [])
+    elif held then
+        ok profileJson
+    else
+        notFound
+
+[<Fact>]
+let ``an empty officer list for a number Companies House doesn't hold is NotAvailable`` () : Task =
+    task {
+        use handler = new FakeHandler(emptyLists false)
+
+        match! (registryOver handler).OfficersAsync("00000006", gb, ct) with
+        | Ok { Value = NotAvailable _ } ->
+            Assert.Contains(handler.Calls, fun call -> call.Target.EndsWith "/company/00000006")
+        | other -> failwith $"%A{other}"
+    }
+
+[<Fact>]
+let ``an empty filing history for a number Companies House doesn't hold is NotAvailable`` () : Task =
+    task {
+        use handler = new FakeHandler(emptyLists false)
+
+        let registry =
+            CompaniesHouseRegistry(clientWith handler, fun () -> fixedTime) :> IFilingRegister
+
+        match! registry.FilingsAsync("00000006", ct) with
+        | Ok { Value = NotAvailable _ } -> ()
+        | other -> failwith $"%A{other}"
+    }
+
+[<Fact>]
+let ``an empty officer list for a held company stays empty, and a company already found isn't asked for again``
+    ()
+    : Task =
+    task {
+        use handler = new FakeHandler(emptyLists true)
+        let registry = registryOver handler
+
+        match! registry.OfficersAsync("00000006", gb, ct) with
+        | Ok { Value = Available [] } -> ()
+        | other -> failwith $"%A{other}"
+
+        let! _ = registry.OfficersAsync("00000006", gb, ct)
+
+        Assert.Equal(
+            1,
+            handler.Calls
+            |> List.filter (fun call -> call.Target.EndsWith "/company/00000006")
+            |> List.length
+        )
+    }
+
+[<Fact>]
+let ``a long filing history reads the newest MostRead filings and says it stopped`` () : Task =
+    task {
+        let total = Api.FilingHistory.MostRead + 250
+
+        use handler =
+            new FakeHandler(fun call ->
+                let start = startIndexOf call
+                let size = min 100 (total - start)
+                ok (listJson "total_count" total [ for n in start .. start + size - 1 -> filingItem n ]))
+
+        let registry =
+            CompaniesHouseRegistry(clientWith handler, fun () -> fixedTime) :> IFilingRegister
+
+        match! registry.FilingsAsync("00000006", ct) with
+        | Ok { Value = Available history } ->
+            Assert.Equal(Api.FilingHistory.MostRead, history.Filings.Length)
+            Assert.Equal(ValueSome total, history.Total)
+            Assert.False history.Complete
+            Assert.Equal(Api.FilingHistory.MostRead / Api.Paging.PageSize, handler.Calls.Length)
+        | other -> failwith $"%A{other}"
+    }
+
+[<Fact>]
+let ``a short filing history is read whole and Complete`` () : Task =
+    task {
+        use handler =
+            new FakeHandler(fun call ->
+                match startIndexOf call with
+                | 0 -> ok (listJson "total_count" 2 [ filingItem 0; filingItem 1 ])
+                | _ -> ok (listJson "total_count" 2 []))
+
+        let registry =
+            CompaniesHouseRegistry(clientWith handler, fun () -> fixedTime) :> IFilingRegister
+
+        match! registry.FilingsAsync("00000006", ct) with
+        | Ok { Value = Available history } ->
+            Assert.Equal(2, history.Filings.Length)
+            Assert.True history.Complete
         | other -> failwith $"%A{other}"
     }

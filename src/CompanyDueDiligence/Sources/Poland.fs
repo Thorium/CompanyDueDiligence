@@ -31,7 +31,7 @@ module internal Poland =
                     "Partners of an sp. z o.o. holding 10% of the capital or more, and a sole shareholder of an S.A.: legal owners, with a gap unless one holds every share. People's names are masked"
             Cost = AccessCost.Free
             RateLimit = RateLimitPolicy.NotPublished(1, TimeSpan.FromSeconds 1.)
-            Licence = "No licence stated by the API or the Ministry of Justice's KRS pages"
+            Licence = "None named; reuse under the 2021 open data act, art. 24, per the KRS API page"
         }
 
     /// Not finding a number in either register's extracts: deleted entities can answer the same way, so it doesn't say the number was never used.

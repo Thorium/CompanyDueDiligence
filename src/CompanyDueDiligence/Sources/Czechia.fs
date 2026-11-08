@@ -39,7 +39,7 @@ module internal Czechia =
                     TimeSpan.FromMinutes 1.,
                     "Ministry of Finance ARES terms: access may be limited above 500 queries a minute"
                 )
-            Licence = "No licence stated: neither the API's OpenAPI document nor its answers name one"
+            Licence = "None stated; MF terms limit automated use (500 a minute, no spreading over IPs)"
         }
 
     let private icoRegex = Regex @"\A[0-9]{8}\z"
@@ -522,10 +522,11 @@ type internal CzechiaRegistry(connection: SourceConnection) =
                         match! client.GetAsync(Uri $"{baseUri}/ekonomicke-subjekty/{ico}", ct) with
                         | Error failure -> return Error failure
                         | Ok reply when reply.Status = 404 ->
-                            match SourceAnswer.json reply Czechia.isNotFound with
-                            | Ok true -> return Ok(SourceAnswer.evidence coverage reply ValueNone Czechia.notFound)
-                            | Ok false -> return Error(RegistryFailure.RequestRefused "HTTP 404")
-                            | Error failure -> return Error failure
+                            return
+                                match SourceAnswer.json reply Czechia.isNotFound with
+                                | Ok true -> Ok(SourceAnswer.evidence coverage reply ValueNone Czechia.notFound)
+                                | Ok false -> Error(RegistryFailure.RequestRefused "HTTP 404")
+                                | Error failure -> Error failure
                         | Ok reply ->
                             return
                                 SourceAnswer.json reply (fun root ->

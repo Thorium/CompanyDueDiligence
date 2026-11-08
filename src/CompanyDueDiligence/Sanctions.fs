@@ -17,6 +17,7 @@ type SanctionsListName =
     | UnConsolidated
     | EuConsolidated
 
+/// What sort of party a list entry is, as the list states it.
 [<RequireQualifiedAccess>]
 type ListedParty =
     | Individual
@@ -83,6 +84,7 @@ type ListMinimums =
         Un: int
     }
 
+/// List minimums to start from.
 module ListMinimums =
 
     /// 80% of each list's entries as downloaded on 2026-11-06: SDN 19,555, consolidated 486, UK 6,420 (from 58,836 rows), UN 1,007. So a list can lose a

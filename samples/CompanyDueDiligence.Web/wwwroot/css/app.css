@@ -38,10 +38,6 @@ table.results td { padding: 6px 8px; }
 h3 { margin: 16px 0 4px; font-size: 15px; }
 tr.register td { background: #f3f5f9; padding-top: 10px; }
 p.compact { margin: 6px 0 0; font-size: 13px; }
-div.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 4px; }
-button.chip { font: inherit; font-size: 12px; padding: 3px 9px; border: 1px solid var(--line); background: #fff; color: var(--muted); border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; }
-button.chip img.flag { width: 14px; height: 14px; vertical-align: 0; margin-right: 4px; }
-button.chip.on { background: #e8eefb; border-color: var(--accent); color: var(--ink); }
 table.results button.small { white-space: nowrap; }
 div.links { display: flex; justify-content: flex-end; margin: 8px 0 -4px; }
 h3 button.copy { margin-left: 8px; font-weight: normal; vertical-align: 1px; }

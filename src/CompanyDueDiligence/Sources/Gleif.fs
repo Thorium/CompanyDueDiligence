@@ -43,6 +43,7 @@ type LeiMatches =
         Unread: int
     }
 
+/// Which accounting parent to read: Direct, the closest above the firm, or Ultimate, the highest.
 [<RequireQualifiedAccess>]
 type LeiParentLevel =
     | Direct
@@ -185,6 +186,22 @@ module internal Gleif =
         |> ValueOption.bind (tryObject "goldenCopy")
         |> ValueOption.bind (SourceAnswer.dateOfTimestamp "publishDate")
 
+/// An LEI cross-check, as CaseSources.CrossCheck reads it. GleifCrossCheck reads GLEIF; a host can give a cached copy or another source.
+type ILeiCrossCheck =
+    /// The record for an LEI. ValueNone when the source holds none.
+    abstract ByLeiAsync:
+        lei: string * ct: CancellationToken -> Task<Result<Evidence<LeiRecord voption>, RegistryFailure>>
+
+    /// Records whose reported number is this one, in the jurisdiction asked or possibly so, with those not read counted in Unread.
+    abstract ByRegistrationAsync:
+        number: string * jurisdiction: Jurisdiction * ct: CancellationToken ->
+            Task<Result<Evidence<LeiMatches>, RegistryFailure>>
+
+    /// The firm's parent at this level, or the exception it reported.
+    abstract ParentAsync:
+        lei: string * level: LeiParentLevel * ct: CancellationToken ->
+            Task<Result<Evidence<LeiParent>, RegistryFailure>>
+
 /// GLEIF's API. A cross-check, labelled as such in the case file: reported by the firm or its issuer and not a register's record. CC0, as GLEIF states.
 [<Sealed>]
 type GleifCrossCheck internal (client: SourceClient) =
@@ -324,3 +341,11 @@ type GleifCrossCheck internal (client: SourceClient) =
                                 }
                     | Ok reply -> return this.Read(reply, (Gleif.exceptionReason >> LeiParent.ReportingException))
             }
+
+    interface ILeiCrossCheck with
+        member this.ByLeiAsync(lei, ct) = this.ByLeiAsync(lei, ct)
+
+        member this.ByRegistrationAsync(number, jurisdiction, ct) =
+            this.ByRegistrationAsync(number, jurisdiction, ct)
+
+        member this.ParentAsync(lei, level, ct) = this.ParentAsync(lei, level, ct)

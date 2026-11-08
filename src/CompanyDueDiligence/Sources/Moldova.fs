@@ -29,7 +29,7 @@ module internal Moldova =
                     "Founders with their share of the capital as published; the file doesn't say whether a founder is a person or a company, or give its number"
             Cost = AccessCost.Free
             RateLimit = RateLimitPolicy.NotPublished(1, TimeSpan.FromDays 1.)
-            Licence = "None stated: the ASP open data page names no licence"
+            Licence = "None stated; the site terms allow reuse under the law, source named"
         }
 
     let invalidNumber = "An IDNO has 13 digits, the last a check digit"
@@ -353,7 +353,7 @@ module internal Moldova =
                     | ValueNone -> None)
                 |> Bulk.tally normalNumber
 
-            BulkRegistry(
+            new BulkRegistry(
                 coverage,
                 normalNumber,
                 invalidNumber,

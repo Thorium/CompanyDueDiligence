@@ -30,7 +30,7 @@ module internal Croatia =
                 AccessCost.FreeWithKey
                     "OAuth2 client credentials from sudreg-data.gov.hr, after registering and confirming the e-mail"
             RateLimit = RateLimitPolicy.NotPublished(6, TimeSpan.FromMinutes 1.)
-            Licence = "No licence found: the portal's pages loop on redirects and couldn't be read. Not run live"
+            Licence = "Otvorena dozvola (NN 67/2017), per data.gov.hr; registration required"
         }
 
     /// What a number is looked up as: an OIB, the tax number, or an MBS, the register's own.

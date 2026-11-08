@@ -35,7 +35,7 @@ module internal Austria =
                 AccessCost.FreeWithKey
                     "An X-API-KEY from JustizOnline, once the BMJ approves an application under the IWG"
             RateLimit = RateLimitPolicy.NotPublished(2, TimeSpan.FromSeconds 1.)
-            Licence = "CC BY 4.0, as reported for the BMJ's HVD release; the terms weren't read here. Not run live"
+            Licence = "CC BY 4.0, per data.gv.at's HVD record"
         }
 
     let private soap = XNamespace.Get "http://www.w3.org/2003/05/soap-envelope"

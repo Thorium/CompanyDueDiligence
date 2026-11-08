@@ -21,8 +21,7 @@ module internal Malta =
             Owners = Support.NotOffered "The open data lists no owners"
             Cost = AccessCost.Free
             RateLimit = RateLimitPolicy.NotPublished(2, TimeSpan.FromSeconds 1.)
-            Licence =
-                "CC BY 4.0 as seen on an earlier call; unverified, the openapi document of 2026-11-06 states no licence"
+            Licence = "CC BY 4.0, per data.gov.mt's Basic Company Information record"
         }
 
     /// The words in companies_opendata.csv on 2026-11-06, all 14 of them. Any other is Unknown.

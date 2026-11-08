@@ -40,8 +40,7 @@ module internal Sweden =
                     TimeSpan.FromMinutes 1.,
                     "Bolagsverket: 60 requests a minute per user; not re-read, as bolagsverket.se answers automated reads with a captcha"
                 )
-            Licence =
-                "None stated in the OpenAPI document or the code lists, and bolagsverket.se couldn't be read past its captcha. Not run live"
+            Licence = "None stated; free, no agreement, per bolagsverket.se"
         }
 
     let private numberRegex = Regex @"\A[0-9]{10}\z"

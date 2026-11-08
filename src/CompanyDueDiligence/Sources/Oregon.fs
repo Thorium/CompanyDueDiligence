@@ -28,8 +28,7 @@ module internal Oregon =
             Owners = Support.NotOffered "The dataset lists no owners"
             Cost = AccessCost.Free
             RateLimit = RateLimitPolicy.NotPublished(2, TimeSpan.FromSeconds 1.)
-            Licence =
-                "No licence stated in the dataset's metadata. Read without a key; a Socrata app token (X-App-Token) would raise the portal's limits"
+            Licence = "Public domain, per ORS 276A.368"
         }
 
     [<Literal>]

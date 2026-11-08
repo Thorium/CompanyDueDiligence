@@ -43,6 +43,22 @@ let ``a profile's fields are read, and absent flags say nothing`` () : Task =
     }
 
 [<Fact>]
+let ``blank address parts, as sandbox answers carry, are left out`` () : Task =
+    task {
+        let body =
+            """{"company_number":"SC123456","company_name":"ACME LTD",
+                "registered_office_address":{"po_box":"","premises":"1","address_line_1":"High St","address_line_2":" ","locality":"Leith",
+                "region":"","postal_code":"EH6 1AA","country":"Scotland"}}"""
+
+        use handler = new FakeHandler(fun _ -> ok body)
+        let! result = Api.Companies.getAsync (clientWith handler) "SC123456" ct
+        let office = (expectOk result).Value.RegisteredOffice.Value
+        Assert.Equal<string list>([ "1"; "High St" ], office.Lines)
+        Assert.Equal(ValueNone, office.Region)
+        Assert.Equal(ValueSome "Leith", office.Locality)
+    }
+
+[<Fact>]
 let ``an unreadable optional date is ValueNone, kept in Raw`` () : Task =
     task {
         use handler =

@@ -206,7 +206,7 @@ module internal Peru =
                         | ValueNone -> BulkRow.WithoutNumber)
                     |> Bulk.tally normalNumber
 
-                BulkRegistry(
+                new BulkRegistry(
                     coverage,
                     normalNumber,
                     invalidNumber,

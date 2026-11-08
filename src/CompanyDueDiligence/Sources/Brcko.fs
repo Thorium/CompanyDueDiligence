@@ -151,7 +151,7 @@ module internal Brcko =
                     | ValueNone -> struct (subjects + 1, skipped + 1))
                 (struct (0, 0))
 
-        BulkRegistry(
+        new BulkRegistry(
             coverage,
             normalNumber,
             invalidNumber,

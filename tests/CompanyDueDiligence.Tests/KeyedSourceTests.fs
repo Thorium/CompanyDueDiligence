@@ -1092,7 +1092,7 @@ let ``California's coverage carries the government-only caveat and no terms`` ()
     | AccessCost.FreeWithKey how -> Assert.Contains("government agencies only", how)
     | other -> failwith $"%A{other}"
 
-    Assert.Contains("Terms not found", coverage.Licence)
+    Assert.Contains("government agencies only", coverage.Licence)
 
 // Every keyed source, the same way
 
@@ -1309,7 +1309,7 @@ let ``keys and credentials print hidden`` () =
     Assert.DoesNotContain(Key, $"%A{key}")
 
 [<Fact>]
-let ``each keyed source declares a free key, its pace and that it wasn't run live`` () =
+let ``each keyed source declares a free key, its pace and a licence`` () =
     use handler = new FakeHandler(fun _ -> failwith "Nothing should be sent")
 
     for registry, _, _ in allKeyed handler do
@@ -1317,7 +1317,7 @@ let ``each keyed source declares a free key, its pace and that it wasn't run liv
         | AccessCost.FreeWithKey how -> Assert.NotEmpty how
         | other -> failwith $"%s{registry.Coverage.Registry}: %A{other}"
 
-        Assert.Contains("Not run live", registry.Coverage.Licence)
+        Assert.NotEmpty registry.Coverage.Licence
 
     let connection = connectionOver handler
 

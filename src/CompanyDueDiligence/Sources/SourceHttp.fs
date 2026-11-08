@@ -8,7 +8,14 @@ open System.Threading
 open System.Threading.Tasks
 open CompanyDueDiligence.CompaniesHouse
 
-/// One HTTP connection for the sources that need no key. Keep it for the application's lifetime; a handler passed in stays the caller's and must
+/// What every request names this library as: its version and address, which some sources, such as Costa Rica's Hacienda, require.
+module internal UserAgent =
+
+    let value =
+        let version = Reflection.Assembly.GetExecutingAssembly().GetName().Version
+        $"CompanyDueDiligence/{version.Major}.{version.Minor}.{version.Build} (+https://github.com/Thorium/CompanyDueDiligence)"
+
+/// One HTTP connection for the sources, keyed or not; each keyed source sends its key to its own host only. Keep it for the application's lifetime; a handler passed in stays the caller's and must
 /// not follow redirects, since a redirect would carry a source's key headers to another host. An HttpClientHandler or SocketsHttpHandler, alone
 /// or inside a DelegatingHandler, with AllowAutoRedirect set raises ArgumentException. In WebAssembly the browser's fetch follows redirects and
 /// the property can't be set, so it isn't checked there, and only sources needing no key belong there.
@@ -42,10 +49,11 @@ type SourceConnection
                 MaxResponseContentBufferSize = largestAnswer
             )
 
-        client.DefaultRequestHeaders.UserAgent.ParseAdd "CompanyDueDiligence/0.3 (+https://github.com/Thorium/CompanyDueDiligence)"
+        client.DefaultRequestHeaders.UserAgent.ParseAdd UserAgent.value
         client
 
     member internal _.Http = http
+    member internal _.Handler = handler
     member internal _.Now = now
     member internal _.Delay = delay
 
@@ -287,7 +295,8 @@ type SourceKey(value: string) =
     member internal _.Value = value
     override _.ToString() = "{ key hidden }"
 
-/// A client ID and secret a source issues for free, for an OAuth2 client-credentials grant. Held out of logs and printed output.
+/// An ID and secret a source issues for free: sent as an OAuth2 client-credentials grant, an HTTP Basic user and password, or a consumer key and
+/// secret, as that source's docs say. Held out of logs and printed output.
 [<Sealed>]
 type ClientCredentials(clientId: string, clientSecret: string) =
     do

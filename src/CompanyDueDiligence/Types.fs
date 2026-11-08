@@ -6,7 +6,7 @@ open System
 open CompanyDueDiligence
 
 /// What an overseas company's UK record says of its home registration, from foreign_company_details.
-type ForeignCompanyDetails =
+type internal ForeignCompanyDetails =
     {
         /// originating_registry.name.
         RegistryName: string voption
@@ -20,20 +20,20 @@ type ForeignCompanyDetails =
     }
 
 /// A UK establishment's overseas parent, from branch_company_details.
-type BranchParent =
+type internal BranchParent =
     {
         ParentNumber: string voption
         ParentName: string voption
     }
 
-type PreviousName =
+type internal PreviousName =
     {
         Name: string
         From: DateOnly voption
         To: DateOnly voption
     }
 
-type CompanyProfile =
+type internal CompanyProfile =
     {
         CompanyNumber: string
         CompanyName: string
@@ -70,7 +70,7 @@ type CompanyProfile =
         Raw: string
     }
 
-module CompanyProfile =
+module internal CompanyProfile =
 
     /// Legal standing: reads company_status and company_status_detail exactly as the enumerations spell them. A value not listed there is
     /// Unknown, as is one listed but contradicting "active". Red flags apart from the status are in concerns.
@@ -96,16 +96,26 @@ module CompanyProfile =
         | ValueNone, ValueSome false -> ValueSome false
         | ValueNone, ValueNone -> ValueNone
 
-    /// True on the link or either flag. False needs both flags to say so.
+    /// True on the link or either flag. False needs has_insolvency_history false, no link, and has_been_liquidated false or missing: the spec
+    /// deprecates it for links.insolvency, and sandbox profiles leave it out.
     let private insolvencyHistory (profile: CompanyProfile) =
         match profile.InsolvencyLink, profile.HasInsolvencyHistory, profile.HasBeenLiquidated with
         | ValueSome _, _, _
         | _, ValueSome true, _
         | _, _, ValueSome true -> ValueSome true
-        | ValueNone, ValueSome false, ValueSome false -> ValueSome false
+        | ValueNone, ValueSome false, (ValueSome false | ValueNone) -> ValueSome false
         | _ -> ValueNone
 
-    /// The flags in neutral terms. One the answer doesn't settle is Unconfirmed, never clear.
+    /// Flags a company type's profile doesn't carry because they don't apply to it: an overseas company files no confirmation statement, as
+    /// every such profile read live on 2026-11-08 showed. A UK establishment's flags do apply, on its overseas company's profile, so they stay
+    /// unconfirmed on its own record; a case reads them from the overseas company.
+    let private notApplicable (profile: CompanyProfile) (concern: CompanyConcern) =
+        match profile.Type, concern with
+        | ValueSome "oversea-company", CompanyConcern.AnnualFilingOverdue -> true
+        | _ -> false
+
+    /// The flags in neutral terms. One the answer doesn't settle is Unconfirmed, never clear; one missing because it doesn't apply to the
+    /// company's type is neither.
     let concerns (profile: CompanyProfile) : CompanyConcerns =
         let checks =
             [
@@ -121,11 +131,11 @@ module CompanyProfile =
 
         {
             Stated = where (ValueSome true)
-            Unconfirmed = where ValueNone
+            Unconfirmed = where ValueNone |> List.filter (notApplicable profile >> not)
         }
 
 /// A hit from the company search.
-type CompanySearchItem =
+type internal CompanySearchItem =
     {
         CompanyNumber: string
         Title: string
@@ -137,7 +147,7 @@ type CompanySearchItem =
     }
 
 /// A hit from the officer search: one officer as Companies House groups appointments, not a company.
-type OfficerSearchItem =
+type internal OfficerSearchItem =
     {
         Title: string
         Description: string voption
@@ -149,7 +159,7 @@ type OfficerSearchItem =
         Raw: string
     }
 
-type CompanyOfficer =
+type internal CompanyOfficer =
     {
         Name: string
         /// Companies House's officer_role, such as "director" or "corporate-secretary".
@@ -172,7 +182,7 @@ type CompanyOfficer =
     }
 
 /// One appointment of an officer, at any company.
-type OfficerAppointment =
+type internal OfficerAppointment =
     {
         Name: string
         /// Companies House's officer_role, such as "director".
@@ -193,7 +203,7 @@ type OfficerAppointment =
     }
 
 /// A UK establishment of a company registered overseas.
-type UkEstablishment =
+type internal UkEstablishment =
     {
         CompanyNumber: string
         CompanyName: string
@@ -204,12 +214,12 @@ type UkEstablishment =
 
 /// Which details call answers for a disqualified officer. These ids aren't known to link to officer ids.
 [<RequireQualifiedAccess>]
-type DisqualifiedOfficerId =
+type internal DisqualifiedOfficerId =
     | Natural of string
     | Corporate of string
 
 /// A hit from the disqualified officer search: a name that matched, and no more than that.
-type DisqualifiedOfficerSearchItem =
+type internal DisqualifiedOfficerSearchItem =
     {
         Title: string
         Description: string voption
@@ -221,7 +231,7 @@ type DisqualifiedOfficerSearchItem =
     }
 
 /// One disqualification of an officer.
-type Disqualification =
+type internal Disqualification =
     {
         CaseIdentifier: string voption
         /// Companies House's disqualification_type, naming the authority that handled it.
@@ -241,7 +251,7 @@ type Disqualification =
     }
 
 /// Permission a disqualified officer has to act despite a disqualification.
-type PermissionToAct =
+type internal PermissionToAct =
     {
         CompanyNames: string list
         CourtName: string voption
@@ -250,7 +260,7 @@ type PermissionToAct =
     }
 
 /// A disqualified officer's record, natural or corporate. The fields of the other kind are ValueNone.
-type DisqualifiedOfficer =
+type internal DisqualifiedOfficer =
     {
         /// A natural officer's name parts joined, or a corporate officer's name.
         Name: string
@@ -266,7 +276,7 @@ type DisqualifiedOfficer =
     }
 
 /// What a search by name read, up to its cap.
-type SearchRead<'T> =
+type internal SearchRead<'T> =
     {
         Found: 'T list
         /// The total the search stated.
@@ -278,7 +288,7 @@ type SearchRead<'T> =
 /// The answer to a disqualified officer search by name. It is never a definite hit or a clear: the register gives no link from a company's
 /// officer to a disqualified officer, and a name can be spelled another way or shared. A search that failed is an Error, not one of these.
 [<RequireQualifiedAccess>]
-type DisqualificationSearch =
+type internal DisqualificationSearch =
     /// Entries whose wording matched, to check by hand against each one's details. If not Complete, there are more unread.
     | PossibleMatches of SearchRead<DisqualifiedOfficerSearchItem>
     /// The search read everything and no entry matched this wording.
@@ -287,7 +297,7 @@ type DisqualificationSearch =
     | Inconclusive of reason: string
 
 /// A person with significant control, or a beneficial owner.
-type Psc =
+type internal Psc =
     {
         /// Companies House's kind, such as "individual-person-with-significant-control".
         Kind: string voption
@@ -309,7 +319,7 @@ type Psc =
     }
 
 /// What a company states about its persons with significant control.
-type PscStatement =
+type internal PscStatement =
     {
         /// Companies House's code, such as "psc-exists-but-not-identified".
         Statement: string
@@ -319,7 +329,7 @@ type PscStatement =
         Raw: string
     }
 
-type FilingHistoryItem =
+type internal FilingHistoryItem =
     {
         TransactionId: string
         Category: string voption
@@ -339,7 +349,7 @@ type FilingHistoryItem =
         Raw: string
     }
 
-type Charge =
+type internal Charge =
     {
         Id: string voption
         ChargeCode: string voption
@@ -355,14 +365,14 @@ type Charge =
         Raw: string
     }
 
-type InsolvencyDate =
+type internal InsolvencyDate =
     {
         /// Companies House's date type, such as "wound-up-on".
         Type: string voption
         Date: DateOnly voption
     }
 
-type InsolvencyPractitioner =
+type internal InsolvencyPractitioner =
     {
         Name: string voption
         Role: string voption
@@ -371,7 +381,7 @@ type InsolvencyPractitioner =
         Address: Address voption
     }
 
-type InsolvencyCase =
+type internal InsolvencyCase =
     {
         /// Companies House's case type, such as "compulsory-liquidation".
         Type: string voption
@@ -381,7 +391,7 @@ type InsolvencyCase =
         Notes: string list
     }
 
-type Insolvency =
+type internal Insolvency =
     {
         Status: string voption
         Cases: InsolvencyCase list
@@ -389,7 +399,7 @@ type Insolvency =
     }
 
 /// A document's metadata. ContentTypes are the values Api.Documents can ask for.
-type DocumentMetadata =
+type internal DocumentMetadata =
     {
         Id: string voption
         Pages: int voption
@@ -401,7 +411,7 @@ type DocumentMetadata =
 /// Where the Document API redirected to. The URL's query is a signature that lets anyone read the document until it expires, so printing
 /// one (%A, ToString) shows the host only: keep the Uri out of logs.
 [<StructuredFormatDisplay("{Display}")>]
-type DocumentLocation =
+type internal DocumentLocation =
     {
         Uri: Uri
         ContentType: string
@@ -412,7 +422,7 @@ type DocumentLocation =
 
     override this.ToString() = this.Display
 
-type DocumentContent =
+type internal DocumentContent =
     {
         /// The type the document host answered with, or else the type asked for.
         ContentType: string
@@ -421,7 +431,7 @@ type DocumentContent =
 
 /// The counts a list states beside its total.
 [<Struct>]
-type ListCounts =
+type internal ListCounts =
     {
         Active: int
         /// resigned_count or ceased_count, whichever the list uses.
@@ -431,7 +441,7 @@ type ListCounts =
     }
 
 /// One page of a list.
-type Page<'T> =
+type internal Page<'T> =
     {
         Items: 'T list
         /// total_results or total_count, whichever the list uses.

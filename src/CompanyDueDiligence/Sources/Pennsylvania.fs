@@ -226,12 +226,12 @@ type internal PennsylvaniaRegistry(connection: SourceConnection) =
             Task.FromResult(
                 Error(
                     RegistryFailure.InvalidRequest
-                        "A Pennsylvania filing number is up to ten digits, such as 0000000378"
+                        "A Pennsylvania filing number is up to eleven digits, such as 0000000378"
                 )
             )
-        | ValueSome id ->
+        | ValueSome pid ->
             task {
-                match! client.GetAsync(OpenData.socrataWhere dataset "filing_number" id rowLimit, ct) with
+                match! client.GetAsync(OpenData.socrataWhere dataset "filing_number" pid rowLimit, ct) with
                 | Error failure -> return Error failure
                 | Ok reply when reply.Status = 404 -> return Error(RegistryFailure.RequestRefused "HTTP 404")
                 | Ok reply ->

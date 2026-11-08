@@ -12,6 +12,7 @@ type Jurisdiction =
     private
     | Jurisdiction of code: string
 
+    /// The code in upper case, such as GB or US-DE.
     member this.Code =
         let (Jurisdiction code) = this
         code
@@ -20,10 +21,12 @@ type Jurisdiction =
     member this.Country = this.Code.Substring(0, 2)
     override this.ToString() = this.Code
 
+/// Parsing and comparing jurisdictions.
 module Jurisdiction =
 
     let private tryParseRegex = Regex @"\A[A-Za-z]{2}(-[A-Za-z0-9]{1,3})?\z"
 
+    /// The jurisdiction of a code in the form GB or GB-SCT, in any case, or ValueNone for null or any other shape.
     let tryParse (code: string) =
         if not (isNull code) && tryParseRegex.IsMatch(code) then
             ValueSome(Jurisdiction(code.ToUpperInvariant()))
@@ -69,6 +72,19 @@ type Evidence<'T> =
         Value: 'T
     }
 
+/// Building evidence records.
+module Evidence =
+
+    /// An answer from source at retrievedAt, with no stated data date and no raw text: set those with { Evidence.create ... with ... }.
+    let create (source: string) (retrievedAt: DateTimeOffset) (value: 'T) : Evidence<'T> =
+        {
+            Source = source
+            RetrievedAt = retrievedAt
+            AsOf = ValueNone
+            Raw = ValueNone
+            Value = value
+        }
+
 /// A company's legal standing as its register publishes it; a status an adapter can't place is Unknown. It says nothing of Company.Concerns.
 [<RequireQualifiedAccess>]
 type CompanyStanding =
@@ -88,6 +104,7 @@ type CompanyStanding =
     /// A status the adapter doesn't recognise, or none.
     | Unknown of status: string voption
 
+/// Reading a company's standing.
 module CompanyStanding =
 
     /// True for Active only. This is legal standing alone, and only on the register that said it.
@@ -138,6 +155,7 @@ type AddressKind =
     /// A label of the source's own.
     | Other of string
 
+/// An address with the kind the register gives it.
 type CompanyAddress = { Kind: AddressKind; Address: Address }
 
 /// Something a register can state against a company, apart from its legal standing.
@@ -151,8 +169,10 @@ type CompanyConcern =
     /// Insolvency or liquidation, past or present.
     | InsolvencyHistory
 
+/// The concerns as a set.
 module CompanyConcern =
 
+    /// Every concern, each once.
     let all =
         [
             CompanyConcern.AccountsOverdue
@@ -171,6 +191,7 @@ type CompanyConcerns =
         Unconfirmed: CompanyConcern list
     }
 
+/// Concern lists for registers to start from.
 module CompanyConcerns =
 
     /// For a register that publishes none of them.
@@ -228,6 +249,7 @@ module internal PartyNames =
         || name = NotPublished
         || name.StartsWith(overseasPrefix, StringComparison.Ordinal)
 
+/// A company as one register holds it. It says how the company stands on that register, and nothing of other registers.
 type Company =
     {
         Name: string
@@ -254,6 +276,30 @@ type Company =
         EstablishmentOf: string voption
     }
 
+/// Building company records.
+module Company =
+
+    /// A company record with its name, number and register's jurisdiction, and nothing else stated: standing Unknown, concerns not published,
+    /// addresses not read, role not stated. Set the rest with { Company.create ... with ... }, so that a field added later breaks no adapter.
+    let create (name: string) (number: string) (jurisdiction: Jurisdiction) : Company =
+        {
+            Name = name
+            OtherNames = []
+            Number = number
+            Jurisdiction = jurisdiction
+            JurisdictionAsPublished = ValueNone
+            Standing = CompanyStanding.Unknown ValueNone
+            Concerns = CompanyConcerns.notPublished
+            StatusAsPublished = ValueNone
+            LegalForm = ValueNone
+            IncorporatedOn = ValueNone
+            CeasedOn = ValueNone
+            Addresses = NotAvailable "Not read"
+            Role = RecordRole.NotStated
+            HomeRegistration = ValueNone
+            EstablishmentOf = ValueNone
+        }
+
 /// One role a register publishes for a person whose name matched. It says the register holds the name, not that it is the person meant.
 type PersonMatch =
     {
@@ -273,6 +319,7 @@ type PersonMatch =
         EndedOn: DateOnly voption
     }
 
+/// The roles a person search found. Matches say the register holds the name, not that it is the person meant.
 type PersonSearchResult =
     {
         Matches: PersonMatch list
@@ -293,6 +340,7 @@ type CompanyMatch =
         Address: Address voption
     }
 
+/// The companies a name search found. An empty list says no name is on the register only when Complete is true.
 type SearchResult =
     {
         Matches: CompanyMatch list
@@ -306,16 +354,20 @@ type SearchResult =
 /// (INameMatchSearch) or a bulk source's Contains, which compares upper case only, can compare more strictly.
 [<RequireQualifiedAccess>]
 type NameMatch =
-    /// The whole name, after NameMatching.normalise on both: case, accents and the spacing of punctuation are ignored.
+    /// The whole name, after NameMatch.normalise on both: case, accents and the spacing of punctuation are ignored.
     | Exact
     /// Names starting with the term.
     | StartsWith
     /// Names holding the term anywhere.
     | Contains
 
+/// The name matching rule every adapter and bulk source keeps.
 module NameMatch =
 
-    /// A test of published names against the name asked, after NameMatching.normalise on both: equal for Exact, starting with it for StartsWith,
+    /// A name in the form every mode compares: upper case, accents off, punctuation and spacing evened out.
+    let normalise (name: string) = NameMatching.normalise name
+
+    /// A test of published names against the name asked, after NameMatch.normalise on both: equal for Exact, starting with it for StartsWith,
     /// holding it for Contains. A name asked with no letter or digit matches nothing.
     let matcher (matching: NameMatch) (asked: string) : string -> bool =
         match NameMatching.normalise asked with
@@ -340,9 +392,6 @@ module NameMatch =
                         (NameMatching.normalise published).StartsWith(normal, StringComparison.Ordinal)
             | NameMatch.Contains ->
                 fun published -> (NameMatching.normalise published).Contains(normal, StringComparison.Ordinal)
-
-    /// True when published matches asked, as matcher tests.
-    let isMatch (matching: NameMatch) (asked: string) (published: string) = matcher matching asked published
 
     /// The matches of a register's own search that match asked. The result is never Complete, and TotalMatches, which counts the register's own
     /// search, is dropped.
@@ -385,12 +434,14 @@ type IdentityVerification =
         PreferredName: string voption
     }
 
+/// An officer's role. Any role other than director or secretary keeps the register's wording.
 [<RequireQualifiedAccess>]
 type OfficerRole =
     | Director
     | Secretary
     | Other of asPublished: string
 
+/// An appointment the register records, current or ended.
 type Officer =
     {
         Name: string
@@ -410,6 +461,7 @@ type Officer =
         IdentityVerification: IdentityVerification voption
     }
 
+/// The kind of control an owner holds. A nature the adapter can't place is Other, with the wording in NatureOfControl.AsPublished.
 [<RequireQualifiedAccess>]
 type ControlKind =
     | Ownership
@@ -422,6 +474,7 @@ type ControlKind =
 [<Struct>]
 type PercentBand = { From: int; To: int }
 
+/// One nature of control as the register publishes it, with its kind and band read from the wording. AsPublished is the record.
 type NatureOfControl =
     {
         Kind: ControlKind
@@ -429,6 +482,7 @@ type NatureOfControl =
         AsPublished: string
     }
 
+/// A direct owner the register records, current or ended, with the control it holds.
 type Owner =
     {
         /// ValueNone when the register withholds who it is.
@@ -482,6 +536,7 @@ type OwnerStatementMeaning =
     | ChangesOnly
     | LeavesGap of OwnershipGap
 
+/// A statement the register holds about the company's ownership, apart from the owners listed.
 type OwnerStatement =
     {
         Meaning: OwnerStatementMeaning
@@ -489,6 +544,7 @@ type OwnerStatement =
         AsPublished: string
     }
 
+/// A company's direct owners as one register lists them, with what keeps the list from being whole.
 type OwnerListing =
     {
         /// Current and former owners. No current owner, inside Available, means the register states there is none.
@@ -499,6 +555,7 @@ type OwnerListing =
         Gaps: OwnershipGap list
     }
 
+/// Reading an owner listing.
 module OwnerListing =
 
     /// True only when nothing the register published leaves a gap. It covers direct owners: a legal entity's own owners are a further lookup.
@@ -557,12 +614,40 @@ type RegistryCoverage =
         Licence: string
     }
 
+/// Building and reading a register's coverage.
 module RegistryCoverage =
 
+    /// A register's coverage with every part NotOffered: set what it offers with { RegistryCoverage.create ... with ... }, so that a field added
+    /// later breaks no adapter.
+    let create
+        (registry: string)
+        (jurisdictions: Jurisdiction list)
+        (cost: AccessCost)
+        (rateLimit: RateLimitPolicy)
+        (licence: string)
+        : RegistryCoverage =
+        let notOffered = Support.NotOffered "Not offered"
+
+        {
+            Registry = registry
+            Jurisdictions = jurisdictions
+            Standing = notOffered
+            Concerns = notOffered
+            Addresses = notOffered
+            Search = notOffered
+            Officers = notOffered
+            Owners = notOffered
+            Cost = cost
+            RateLimit = rateLimit
+            Licence = licence
+        }
+
+    /// True when one of the jurisdictions the coverage lists answers for jurisdiction, by Jurisdiction.covers.
     let covers (coverage: RegistryCoverage) (jurisdiction: Jurisdiction) =
         coverage.Jurisdictions
         |> List.exists (fun scope -> Jurisdiction.covers scope jurisdiction)
 
+/// Why a register call gave no answer. None of them says anything about the company.
 [<RequireQualifiedAccess>]
 type RegistryFailure =
     /// The register doesn't answer for this jurisdiction, which says nothing about whether the company exists.
@@ -579,6 +664,7 @@ type RegistryFailure =
     /// The register answered and the adapter could not read it. Holds no text from the answer.
     | UnreadableAnswer of reason: string
 
+/// Reading a register failure.
 module RegistryFailure =
 
     /// One line saying what went wrong, for logs and exception messages.
@@ -607,6 +693,7 @@ module RegistryFailure =
 /// One company register. An implementation answers OutsideCoverage for a jurisdiction its Coverage doesn't list, Available ValueNone only when the
 /// register says the number isn't held, and NotAvailable when its answer can't tell. Cancelling ct throws.
 type ICompanyRegistry =
+    /// What the register covers. Calls for a jurisdiction it doesn't cover answer OutsideCoverage.
     abstract Coverage: RegistryCoverage
 
     /// The company with this registration number. Available ValueNone says the register holds no such number; NotAvailable says this source
@@ -632,7 +719,7 @@ type ICompanyRegistry =
 
 /// A register whose own query does the name matching. Registers that can't, don't implement it: Registries.searchByNameAsync narrows their
 /// SearchAsync instead. An implementation answers as SearchAsync does, and InvalidRequest for an Exact or StartsWith name with no letter or digit.
-/// Complete is true only when the register's query returned every row it matched. A query can compare less loosely than NameMatching.normalise,
+/// Complete is true only when the register's query returned every row it matched. A query can compare less loosely than NameMatch.normalise,
 /// such as accents as held: the README's Sources section says how each register compares.
 type INameMatchSearch =
     /// Companies whose name matches as asked.
@@ -674,6 +761,7 @@ type PersonName =
         this.Forenames
         @ (this.Surname.Split(' ', StringSplitOptions.RemoveEmptyEntries) |> List.ofArray)
 
+/// Parsing a person's name and matching it to published names.
 module PersonName =
 
     let private words (text: string) =
@@ -717,7 +805,7 @@ module PersonName =
         (NameMatching.normalise text).Split(' ', StringSplitOptions.RemoveEmptyEntries)
         |> Set.ofArray
 
-    /// True when every word of the name asked, after NameMatching.normalise, is a whole word of the published name, in any order. A published name
+    /// True when every word of the name asked, after NameMatch.normalise, is a whole word of the published name, in any order. A published name
     /// holding an asterisk is masked and never matches.
     let matches (asked: PersonName) (published: string) =
         if String.IsNullOrWhiteSpace published || published.Contains '*' then
@@ -738,6 +826,7 @@ type IPersonSearch =
         name: string * jurisdiction: Jurisdiction * ct: CancellationToken ->
             Task<Result<Evidence<Availability<PersonSearchResult>>, RegistryFailure>>
 
+/// Choosing among registers and calling them through their optional interfaces.
 module Registries =
 
     /// The registry to read first for the jurisdiction: the first whose coverage names the exact code, else the first covering its country.

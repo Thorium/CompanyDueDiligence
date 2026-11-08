@@ -28,7 +28,7 @@ module internal California =
                 AccessCost.FreeWithKey
                     "Sign up at calicodev.sos.ca.gov and subscribe to CBC API Production, which needs approval; the portal says the API is available to government agencies only at this time, and its cost is unconfirmed"
             RateLimit = RateLimitPolicy.NotPublished(2, TimeSpan.FromSeconds 1.)
-            Licence = "Terms not found: the developer portal's product states none. Not run live"
+            Licence = "None stated; the portal says government agencies only, approval required"
         }
 
     /// The search returns the top 150 matches.

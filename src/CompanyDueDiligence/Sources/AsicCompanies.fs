@@ -242,7 +242,7 @@ module internal AsicCompanies =
                 (fun held -> currentName (column held.Header) (rowsOf held))
             )
 
-        BulkRegistry(
+        new BulkRegistry(
             coverage,
             normalAcn,
             invalidNumber,

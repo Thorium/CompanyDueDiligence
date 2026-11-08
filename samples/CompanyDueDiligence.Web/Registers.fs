@@ -97,7 +97,6 @@ let keyless =
         keylessSource "CR" "Costa Rica: Hacienda (tax registration)" "Americas" "cr" "4000042139" true Sources.costaRica
         keylessSource "IL" "Israel: Companies Registrar" "Asia" "il" "515532778" true Sources.israel
         keylessSource "SG" "Singapore: ACRA" "Asia" "sg" "201201936C" true Sources.singapore
-        keylessSource "TW" "Taiwan: MOEA GCIS" "Asia" "tw" "22099131" false Sources.taiwan
     ]
 
 let private keyedSource code jurisdiction label flag example settings =

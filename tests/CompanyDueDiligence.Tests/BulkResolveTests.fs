@@ -353,7 +353,7 @@ let ``a resolved source downloads, loads, and lists its files with their portal 
 
             match! cache.LoadAsync(asic, ct) with
             | Ok registry ->
-                use _ = registry :?> IDisposable
+                use _ = registry
 
                 match! registry.TryFindAsync("000 000 019", Jurisdiction.ofCode "AU", ct) with
                 | Ok({ Value = Available(ValueSome company) } as evidence) ->
@@ -395,7 +395,7 @@ let ``downloading again removes a file the new listing no longer names`` () : Ta
 
             match! cache.LoadAsync(chile, ct) with
             | Ok registry ->
-                use _ = registry :?> IDisposable
+                use _ = registry
                 let! evidence = registry.TryFindAsync("76286049-K", Jurisdiction.ofCode "CL", ct)
                 Assert.True(Result.isOk evidence)
             | Error failure -> failwith (RegistryFailure.describe failure)

@@ -355,6 +355,34 @@ let ``a 404 on the read at the total ends the list`` () : Task =
     }
 
 [<Fact>]
+let ``an empty page with a total of 0 at the total ends the list, as the sandbox answers`` () : Task =
+    task {
+        use handler =
+            new FakeHandler(fun call ->
+                match startIndexOf call with
+                | 0 -> ok (officersJson 2 0 [ officer 0; officer 1 ])
+                | _ -> ok (officersJson 0 0 []))
+
+        let! result = Api.Officers.allAsync (clientWith handler) "00000006" ct
+        Assert.Equal(2, (names result).Length)
+    }
+
+[<Fact>]
+let ``an empty page with a total of 0 below the total is still IncompleteList`` () : Task =
+    task {
+        use handler =
+            new FakeHandler(fun call ->
+                match startIndexOf call with
+                | 0 -> ok (officersJson 3 0 [ officer 0; officer 1 ])
+                | _ -> ok (officersJson 0 0 []))
+
+        match! Api.Officers.allAsync (clientWith handler) "00000006" ct with
+        | Error(InconsistentList(2, _))
+        | Error(IncompleteList(2, 3)) -> ()
+        | other -> failwith $"%A{other}"
+    }
+
+[<Fact>]
 let ``a page repeating the one before is RepeatedPage, not a loop`` () : Task =
     task {
         let calls = ref 0

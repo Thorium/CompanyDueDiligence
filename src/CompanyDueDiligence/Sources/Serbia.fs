@@ -23,7 +23,7 @@ module internal Serbia =
             Owners = Support.NotOffered "The open data lists no members or shareholders"
             Cost = AccessCost.Free
             RateLimit = RateLimitPolicy.NotPublished(1, TimeSpan.FromDays 1.)
-            Licence = "Open Data Licence of the Republic of Serbia, per APR's open data notes; not re-read"
+            Licence = "Serbian Open Data Licence, per data.gov.rs"
         }
 
     let invalidNumber = "A matični broj has 8 digits"
@@ -126,7 +126,7 @@ module internal Serbia =
                     | ValueNone -> BulkRow.WithoutNumber)
                 |> Bulk.tally normalNumber
 
-            BulkRegistry(
+            new BulkRegistry(
                 coverage,
                 normalNumber,
                 invalidNumber,

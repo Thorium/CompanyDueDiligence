@@ -12,7 +12,7 @@ vendor's, on that date.
 The rule throughout is fail closed: an unreadable answer, a parse failure, a failed source or anything that can't be followed becomes a gap. It never reads as
 nothing found.
 
-**Companies House and the other sources behind a key have not been run against their live APIs**, because no keys exist: their answers are shaped from the published specs. See
+Companies House was run live on 2026-11-08: profiles, officers, owners, filings, insolvency, UK establishments, search, person search and full cases, on companies of each type. **The other sources behind a key have not been run against their live APIs**: their answers are shaped from the published specs. See
 [what to check live](#what-to-check-live). The keyless sources were called live on 2026-11-06 or 2026-11-08, except the Netherlands' KVK, which answered 429. Their recorded answers are in `tests/CompanyDueDiligence.Tests/Fixtures`, with people's names redacted.
 [Sources](#sources) lists the 58 registers read here, and GLEIF, and [docs/candidate-sources.md](https://github.com/Thorium/CompanyDueDiligence/blob/HEAD/docs/candidate-sources.md) covers every other country.
 
@@ -40,7 +40,7 @@ Rules that follow from it:
 - What a pointer says of the far record is evidence about that record, so a UK record's stated legal form and home number are compared with what the home record says.
 - Each part of a register's `Coverage` that is `Partial` (standing, concerns, addresses, owners) is a gap carrying its caveat, so a tax register's "Registered" is read as a tax registration only.
   A register with no status word is a `standing` gap: its "Registered" confirms no standing.
-- An answer whose data is older than the day it is read, by its `AsOf` or, for a downloaded file, its `RetrievedAt`, is a `data date` gap: later changes aren't seen. "Not held" from such data says
+- An answer whose data is older than the day it is read, by its `AsOf` or, for a downloaded file, its `RetrievedAt`, is a `data date` gap: later changes aren't seen. So is any answer from a downloaded file that states no date of its own, whenever it was downloaded. "Not held" from such data says
   the date in its flag, and is a gap on the whole case, since the company may have been formed since.
 - `Evidence.Raw` can hold personal data. So can a case's JSON and its export with `includeRaw`.
 
@@ -48,33 +48,27 @@ Rules that follow from it:
 
 ```fsharp
 open CompanyDueDiligence
-open CompanyDueDiligence.CompaniesHouse
 
 let connection = SourceConnection.Create()
-let companiesHouse = CompaniesHouseRegistry(CompaniesHouseClient.Create({ ApiKey = apiKeyFromConfiguration }, Endpoints.live, TimeSpan.FromSeconds 20.))
+let companiesHouse = Sources.companiesHouse connection (SourceKey apiKeyFromConfiguration)
 
 let sources =
-    {
-        Registries =
-            [
-                companiesHouse
-                Sources.malta connection
-                Sources.france connection
-                Sources.finland connection
-                Sources.texas connection
-            ]
-        Filings = [ companiesHouse ]
-        CrossCheck = ValueSome(Sources.gleif connection)
-        Routes = CoverageRoutes.all
-        KnownAddresses = []
-    }
+    { CaseSources.ofRegistries
+          [
+              companiesHouse
+              Sources.malta connection
+              Sources.france connection
+              Sources.finland connection
+              Sources.texas connection
+          ] with
+        CrossCheck = ValueSome(Sources.gleif connection) }
 
 task {
     let! case =
         Investigation.openAsync
             sources
             InvestigationOptions.defaults
-            { CaseId = "CASE-1"; Number = "00000006"; Jurisdiction = Jurisdiction.ofCode "GB"; NameGiven = "As the customer gave it" }
+            (CaseStart.create "CASE-1" "00000006" (Jurisdiction.ofCode "GB") "As the customer gave it")
             cancellationToken
 
     let screened = Investigation.screen listTexts InvestigationOptions.defaults case
@@ -83,13 +77,13 @@ task {
 ```
 
 - **Following links.** `openAsync` starts from one company and follows corporate owners, UK establishments, home records and GLEIF parents into whichever source covers that country. `MaxDepth` (4) and
-  `MaxEntities` (25) are choices made without data. One record is read once, so a loop ends. What it can't follow becomes a gap: no number, wording it can't place, no source. `JurisdictionWords` reads a
+  `MaxEntities` (25) are choices made without data. One record is read once, so a loop ends. What it can't follow becomes a gap: no number, wording it can't place, no source. Placing reads a
   wording whole and never guesses: `New South Wales` isn't Wales, and `Georgia` alone places nothing. A stated country it can't place stays a gap, whatever a register's wording says.
 - **Several registers for one place.** Every register covering the jurisdiction is asked, those naming the exact code (`CA-BC`) before those covering the country (`CA`), each in `Registries` order.
   The first that holds the company is the record followed. The others' answers are kept as evidence on the same entity, so `Discrepancies` compares them, and their status and stated concerns are flagged.
   An answer of outside coverage or "can't tell" doesn't hide the next register. When every register answers outside coverage, as Corporations Canada does for a province code, the record is a route or
   `NoRoute` gap, not a failure.
-- **GLEIF in every outcome.** The LEI cross-check is read whether a register held the company, said it doesn't, couldn't tell, failed, or no source covers the country, and its parents are followed.
+- **GLEIF in every outcome.** The LEI cross-check is read whether a register held the company, said it doesn't, couldn't tell, failed, or no source covers the country, and its parents are followed. When the number as asked finds nothing, the number as the register wrote it is asked too, and an answer holding no record is kept as evidence.
 - **Places without numbers.** A home record or registration that names a place and no number is placed: the gap says where, and is that place's declared route (Delaware's paid contract) when there is one.
   The home entity is keyed by name and the place, so Colorado, Connecticut and New York registrations of one Delaware company reach one home entity. A bare two-letter code on a record held in the US or
   Canada is that country's state or province code (`DE` from Colorado is Delaware, `AB` from British Columbia is Alberta). Anywhere else it is a country code, and it gives way to a US state another
@@ -112,43 +106,43 @@ task {
 
 `RegistryCoverage` states each source's cost, pace and licence. Sources are in three groups:
 - **Lookups with no key** were called live on 2026-11-06 or 2026-11-08 with a few read-only calls, except the Netherlands' KVK, which answered 429.
-- **Lookups behind a free key** were written from the official specs, since no keys exist here, and have not been run live.
+- **Lookups behind a free key** were written from the official specs. Companies House was run live on 2026-11-08; the others haven't been, for want of keys.
 - **Bulk sources** read files the host downloads.
 
 A row says what was run live and what is unverified. Recorded answers are in `tests/CompanyDueDiligence.Tests/Fixtures`, with people's names redacted.
 
 A source answering for a country also answers for its subdivisions (`Jurisdiction.covers`), and `Registries.forJurisdiction` takes the first register naming the exact code (`CA-BC`), else the first covering the country, so list order matters only among registers at the same level. Corporations Canada refuses province codes itself.
 
-`Registries.searchByNameAsync registry name matching jurisdiction ct` searches by name as `NameMatch.Exact` (the whole name after `NameMatching.normalise`), `StartsWith` or `Contains`. Colorado, Connecticut, New York (both lists), Oregon, Pennsylvania, Texas, Colombia and DC match in their own query (`INameMatchSearch`): each asks for the normalised words in order, with anything around and between them, then keeps the names `NameMatch.matcher` accepts. So all three modes find a name differing in case, separators, and full stops or apostrophes after a word's first letter, before a final S or inside a word of up to three letters, but compare accents as held. Bulk sources and their indexes match all three on the names they hold, with Contains as `SearchAsync`; their Contains compares upper case only, so `PLC` doesn't find `P.L.C.`. These queries ran against fake handlers only: see [what to check live](#what-to-check-live). Every other register answers Contains with its own search and Exact or StartsWith by narrowing that search's page, which is never `Complete`; that includes Taiwan, whose `eq` on a name also contains, and the CKAN full-text searches (Israel, Singapore, Latvia, Ireland).
+`Registries.searchByNameAsync registry name matching jurisdiction ct` searches by name as `NameMatch.Exact` (the whole name after `NameMatch.normalise`), `StartsWith` or `Contains`. Colorado, Connecticut, New York (both lists), Oregon, Pennsylvania, Texas, Colombia and DC match in their own query (`INameMatchSearch`): each asks for the normalised words in order, with anything around and between them, then keeps the names `NameMatch.matcher` accepts. So all three modes find a name differing in case, separators, and full stops or apostrophes after a word's first letter, before a final S or inside a word of up to three letters, but compare accents as held. Bulk sources and their indexes match all three on the names they hold, with Contains as `SearchAsync`; their Contains compares upper case only, so `PLC` doesn't find `P.L.C.`. These queries were run live on 2026-11-08. Every other register answers Contains with its own search and Exact or StartsWith by narrowing that search's page, which is never `Complete`; that includes Taiwan, whose `eq` on a name also contains, and the CKAN full-text searches (Israel, Singapore, Latvia, Ireland).
 
 ### Lookups with no key
 
 | Source | Answers | Live answer | Not offered | Pace | Licence |
 |---|---|---|---|---|---|
-| Malta Business Registry, `Sources.malta` | `MT`, by number such as `C 1` | Name, type, one of 14 state words, address, status date. A 404 is not held only in the registry's own error shape, and the answer must carry the number asked. The `address` field can hold a note such as `STRUCK OFF WEF 23/04/81`, read as no address. | Search, officers, owners, concerns | None published; paced 2 a second, a choice | CC BY 4.0 per an earlier call; unverified, since the OpenAPI document of that date states none |
-| Recherche d'entreprises, `Sources.france` | `FR`, by SIREN | `A`/`C`, head office, officers including auditors, SIREN of corporate officers. **It answers any nine digits with a stub with no name and a date, which is not a company.** Not found is `NotAvailable`, because non-diffusible companies are left out. | Owners, concerns | 7 a second, published, and 30 a second per ASN | Unstated: openapi.json's MIT tag names no data |
+| Malta Business Registry, `Sources.malta` | `MT`, by number such as `C 1` | Name, type, one of 14 state words, address, status date. A 404 is not held only in the registry's own error shape, and the answer must carry the number asked. The `address` field can hold a note such as `STRUCK OFF WEF 23/04/81`, read as no address. | Search, officers, owners, concerns | None published; paced 2 a second, a choice | CC BY 4.0, per data.gov.mt's Basic Company Information record |
+| Recherche d'entreprises, `Sources.france` | `FR`, by SIREN | `A`/`C`, head office, officers including auditors, SIREN of corporate officers. **It answers any nine digits with a stub with no name and a date, which is not a company.** Not found is `NotAvailable`, because non-diffusible companies are left out. | Owners, concerns | 7 a second, published, and 30 a second per ASN | Licence Ouverte 2.0, per data.gouv.fr; the API's own record states none |
 | PRH/YTJ, `Sources.finland` | `FI`, by Business ID | Names, form, addresses, trade register status (`Registered`, not active), Business ID status, situations (bankruptcy, liquidation, re-organisation), last modified. **It answers a value of the wrong shape with an empty list**, so one isn't sent. **The open data holds Trade Register companies, ended ones among them, and leaves out sole traders and entities not on the Trade Register**, so an empty answer is `NotAvailable` and a search is never complete; YTJ's own web service holds them. An ended company is read by its last name and form, with `CeasedOn` from its `endDate`; a search leaves out a company it can't read. | Officers, owners | 429 documented, no figure; paced 2 a second, a choice | CC BY 4.0, per its schema |
 | Brønnøysund Enhetsregisteret, `Sources.norway` | `NO`, by 9-digit organisation number (mod-11) | Bankruptcy, winding-up and forced-dissolution markers; no status word, so a live entity is `Registered`. Brønnøysund's error object for both the entity and the sub-unit is not held; two empty 404s are `NotAvailable`, as an entity removed for legal reasons answers them too; a sub-unit is `NotAvailable`, naming its parent. A struck-off record is `Closed` with its date. **A 410 (removed for legal reasons) is `Closed` with no name.** Roles: CEO and board as directors; resigned roles and deceased people are former. NUF is a foreign registration. Search is never complete: it leaves out deleted entities. | Owners, overdue filings | None published; paced 2 a second | NLOD 2.0 |
-| ARES, `Sources.czechia` | `CZ`, by 8-digit IČO | State from the public register, else the trade register; "v likvidaci" is `WindingUp`; an insolvency-register listing qualifies `Active`. 404 `NENALEZENO` is `NotAvailable`: ARES leaves out entities deleted from the register, so a search is never complete either. Officers with dates. **Owners: partners with % share and a sole shareholder**, legal and not beneficial. | Overdue filings | 500 a minute, per the ARES terms | None stated |
+| ARES, `Sources.czechia` | `CZ`, by 8-digit IČO | State from the public register, else the trade register; "v likvidaci" is `WindingUp`; an insolvency-register listing qualifies `Active`. 404 `NENALEZENO` is `NotAvailable`: ARES leaves out entities deleted from the register, so a search is never complete either. Officers with dates. **Owners: partners with % share and a sole shareholder**, legal and not beneficial. | Overdue filings | 500 a minute, per the ARES terms | None stated; MF terms limit automated use (500 a minute, no spreading over IPs) |
 | RPO, `Sources.slovakia` | `SK`, by 8-digit IČO | A search, then the record (2 calls). No result is `NotAvailable`, as RPO is a nightly replica; several records for one IČO are `NotAvailable`. Termination is `Closed`, code 2 `WindingUp`, code 3 `InInsolvency`. Officers: statutory bodies and prokurists. Owners: partners and shareholders. Lags up to 24 h. | Beneficial owners (withdrawn without a legitimate interest), overdue filings | None published; paced 2 a second | CC BY 4.0, per each answer |
 | CRO open data, `Sources.ireland` | `IE`, by company number | Daily snapshot of 828,842 records, dissolved ones included. All 33 status codes mapped; "Liquidation stayed", a winding up the court has stayed, is `WindingUp`. Absence is `NotAvailable`, as a daily copy. Types 1128 and 1139 are foreign registrations. | Officers, owners, concerns | None published; paced 2 a second | CC BY 4.0 |
-| KRS, `Sources.poland` | `PL`, by KRS number | Status from section 6: liquidation `WindingUp`, bankruptcy and restructuring `InInsolvency`, none `Registered`. **A deleted entity answers 204**, so the full extract is read for its deletion date. 404 in both registers is `NotAvailable`. **The register masks people's names**, so officers and owners are `Withheld`. KRS lists LLC partners only at 10% of capital or more, so a gap stands unless one partner holds every share. | Search, overdue filings | None published; paced 1 a second | None stated |
-| UID register, `Sources.switzerland` | `CH`, by UID (mod-11) | SOAP. UID status with the commercial-register entry status; liquidation wording is `WindingUp`. **A UID with two seats is `NotAvailable`**, and so is an empty answer, as non-public entries are withheld. | Officers, owners | 20 a minute, published by BFS | None stated; OPEN-BY unverified |
+| KRS, `Sources.poland` | `PL`, by KRS number | Status from section 6: liquidation `WindingUp`, bankruptcy and restructuring `InInsolvency`, none `Registered`. **A deleted entity answers 204**, so the full extract is read for its deletion date. 404 in both registers is `NotAvailable`. **The register masks people's names**, so officers and owners are `Withheld`. KRS lists LLC partners only at 10% of capital or more, so a gap stands unless one partner holds every share. | Search, overdue filings | None published; paced 1 a second | None named; reuse under the 2021 open data act, art. 24, per the KRS API page |
+| UID register, `Sources.switzerland` | `CH`, by UID (mod-11) | SOAP. UID status with the commercial-register entry status; liquidation wording is `WindingUp`. **A UID with two seats is `NotAvailable`**, and so is an empty answer, as non-public entries are withheld. | Officers, owners | 20 a minute, published by BFS | None stated; Public Services are for unregistered users. OPEN-BY covers the BFS spec only |
 | Latvian Register of Enterprises, `Sources.latvia` | `LV`, by registration number | CKAN on data.gov.lv: register, officers, beneficial owners. Liquidated is `Dissolved`; blank is `Registered`. Legal address, form, dates, current officers, **registered beneficial owners** (no nature of control). Daily copy, so absence is `NotAvailable`. | Concerns | None published; paced 2 a second | CC0 1.0 |
 | KVK open dataset, `Sources.netherlands` | `NL`, by 8-digit KVK number | **Not run live: 429 to every call on 2026-11-08**; from `api_opendata_basis.yml` v1.1.0. `actief`, insolvency code, legal form. **No name is published.** 404 is `NotAvailable`, since only BVs and NVs are held. | Search, addresses, officers, owners | 1 a minute per IP and 200 per 5 minutes overall, published | CC BY 4.0 |
-| Texas Comptroller, `Sources.texas` | `US-TX`, by SOS file or taxpayer number | Name, address, type, SOS status, right to transact. **Despite its name it holds forfeited and ended records.** **Some file numbers have two rows**, read as `NotAvailable`. Absence proves nothing, and a search is never complete, as it holds almost no dissolved companies. Not the Secretary of State's register. | Officers, owners, concerns | None published; paced 2 a second | None stated |
+| Texas Comptroller, `Sources.texas` | `US-TX`, by SOS file or taxpayer number | Name, address, type, SOS status, right to transact. **Despite its name it holds forfeited and ended records.** **Some file numbers have two rows**, read as `NotAvailable`. Absence proves nothing, and a search is never complete, as it holds almost no dissolved companies. Not the Secretary of State's register. | Officers, owners, concerns | None published; paced 2 a second | None stated; the portal links only Tyler's terms |
 | Colorado Department of State, `Sources.colorado` | `US-CO`, by entity ID | 3.1 million entities since 1864. All 15 status words; formation place gives home or foreign; principal, mailing and agent addresses. Daily copy, so absence is `NotAvailable`. | Officers (not collected), owners, concerns | None published; paced 2 a second | Public Domain |
-| Connecticut Secretary of the State, `Sources.connecticut` | `US-CT`, by business ID | Status and sub-status, 74 pairs mapped; a past-due report is a stated `AnnualFilingOverdue`. Citizenship gives the role. Officers from the Principals dataset (two calls). Absence is `NotAvailable`. | Owners, agents | None published; paced 2 a second | Public Domain (Business Master) |
-| NY Department of State, `Sources.newYork` | `US-NY`, by DOS ID | Active Corporations (monthly, active only) and the newer status history, which decides when it isn't Active; the filings for an inactive ID. Search reads the active list and All Filings (63wc-4exh), which holds dissolved entities, with no status for one only there; never complete. Officers: the CEO only. | Owners, concerns, addresses of an inactive entity | None published; paced 2 a second | None stated |
-| Oregon SOS, `Sources.oregon` | `US-OR`, by registry number | Active only, weekly. Rows for one number collapse to one company with its addresses. Assumed and reserved names are refused. Absence is `NotAvailable`, and a search is never complete. | Officers, owners, concerns | None published; paced 2 a second | None stated |
+| Connecticut Secretary of the State, `Sources.connecticut` | `US-CT`, by business ID | Status and sub-status, 74 pairs mapped; a past-due report is a stated `AnnualFilingOverdue`. Citizenship gives the role. Officers from the Principals dataset (two calls). Absence is `NotAvailable`. | Owners, agents | None published; paced 2 a second | Public Domain (Business Master); Principals states none |
+| NY Department of State, `Sources.newYork` | `US-NY`, by DOS ID | Active Corporations (monthly, active only) and the newer status history, which decides when it isn't Active; the filings for an inactive ID. Search reads the active list and All Filings (63wc-4exh), which holds dissolved entities, with no status for one only there; never complete. Officers: the CEO only. | Owners, concerns, addresses of an inactive entity | None published; paced 2 a second | None stated; OPEN-NY terms: revocable licence, no attribution, a no-bots clause |
+| Oregon SOS, `Sources.oregon` | `US-OR`, by registry number | Active only, weekly. Rows for one number collapse to one company with its addresses. Assumed and reserved names are refused. Absence is `NotAvailable`, and a search is never complete. | Officers, owners, concerns | None published; paced 2 a second | Public domain, per ORS 276A.368 |
 | Pennsylvania DOS, `Sources.pennsylvania` | `US-PA`, by filing number | **No status column**: standing is `Registered` with no word, and the state warns the data overstates active businesses. Officers read. Searches are never complete: the data holds active registrations only. | Owners, concerns | None published; paced 2 a second | Public Domain |
-| DC Corporations Division, `Sources.districtOfColumbia` | `US-DC`, by file number | ArcGIS: 12 status words, locale for the role, addresses. **Every trade name filed** is another name, read in a second call that fails the lookup if it fails. A biennial report past its due date is a stated `AnnualFilingOverdue`. **Beneficial owners** by name and address, with `OwnerDetailsNotConfirmed`. | Officers, disputes, insolvency | None published; paced 2 a second | CC BY 4.0 per Open Data DC; unverified |
-| OrgBook BC, `Sources.britishColumbia` | `CA-BC`, by number such as `BC0772006` | `ACT` is `Active`, `HIS` is `Closed` with its reason; home jurisdiction not BC is a foreign registration. Only the exact `source_id` is taken. Absence is `NotAvailable`. | Addresses, officers, owners, concerns | None published; paced 2 a second | "Access Only License - British Columbia": not an open licence |
+| DC Corporations Division, `Sources.districtOfColumbia` | `US-DC`, by file number | ArcGIS: 12 status words, locale for the role, addresses. **Every trade name filed** is another name, read in a second call that fails the lookup if it fails. A biennial report past its due date is a stated `AnnualFilingOverdue`. **Beneficial owners** by name and address, with `OwnerDetailsNotConfirmed`. | Officers, disputes, insolvency | None published; paced 2 a second | CC BY 4.0, per each layer's ArcGIS item |
+| OrgBook BC, `Sources.britishColumbia` | `CA-BC`, by number such as `BC0772006` | `ACT` is `Active`, `HIS` is `Closed` with its reason; home jurisdiction not BC is a foreign registration. Only the exact `source_id` is taken. Absence is `NotAvailable`. | Addresses, officers, owners, concerns | None published; paced 2 a second | "Access Only License - British Columbia": reproduction needs written permission |
 | RUES on datos.gov.co, `Sources.colombia` | `CO`, by NIT or chamber and matrícula | All 14 matrícula states; a name ending "en liquidación" is `WindingUp`, and "liquidación judicial" or "reorganización" `InInsolvency`; an unrenewed matrícula is `ActiveWithConcern` with `AnnualFilingOverdue`. Legal representative. Absence and duplicates are `NotAvailable`, except two rows of which exactly one is code 09, cancelled by a move of domicile: the other row is read, the move noted in `StatusAsPublished`. | Addresses, owners, insolvency | None published; paced 2 a second | CC BY-SA 4.0 |
-| Hacienda, `Sources.costaRica` | `CR`, by cédula jurídica | **Tax registration only**, not the Registro Nacional: `Inscrito` is `Registered`; arrears or a missed return is `ActiveWithConcern`; `Desinscrito`, as in "Desinscrito oficio", is `Closed` with the word. 404 is `NotAvailable`. | Addresses, search, officers, owners, concerns | Published: 10 a second, 10-minute IP block; paced 2 a second, no retry after a 429 | None stated |
+| Hacienda, `Sources.costaRica` | `CR`, by cédula jurídica | **Tax registration only**, not the Registro Nacional: `Inscrito` is `Registered`; arrears or a missed return is `ActiveWithConcern`; `Desinscrito`, as in "Desinscrito oficio", is `Closed` with the word. 404 is `NotAvailable`. | Addresses, search, officers, owners, concerns | Published: 10 a second, 10-minute IP block; paced 2 a second, no retry after a 429 | None found; the docs answered 403 on 2026-11-08 |
 | Israeli Companies Registrar, `Sources.israel` | `IL`, by 9-digit company number | CKAN on data.gov.il. Hebrew status and sub-status, all seen mapped; a violating company is `ActiveWithConcern`. The corporation type gives Israeli (home) or foreign. Daily copy, so absence is `NotAvailable`. | Officers, owners | None published; paced 2 a second | "Other (Open)" |
 | ACRA on data.gov.sg, `Sources.singapore` | `SG`, by UEN | `Registered` / `Deregistered`, type, street, postcode; a foreign company branch is a foreign registration. Monthly copy, so absence is `NotAvailable`. | Officers, owners, concerns | 4 per 10 s, published for keyless use | Singapore Open Data Licence |
-| MOEA GCIS open data, `Sources.taiwan` | `TW`, by UBN (check digit) | All 33 status words and 廢止登記 (code 10, `Closed`), suspension, ROC-calendar dates, directors and supervisors (a juristic person holding a seat is a `LegalEntity` officer). **A UBN not held answers an empty 200**, read as `NotAvailable`. Search asks status 01 and the ended 04, 05, 07, 08, 09, 10, 11 and 13, one call each under the pacing; never complete. | Owners, concerns beyond insolvency | Daily cap, no figure; paced 2 a second | Open Government Data License v1. Its rules ask for an emailed usage notice and IP registration; it answered without |
+| MOEA GCIS open data, `Sources.taiwan` | `TW`, by UBN (check digit) | All 33 status words and 廢止登記 (code 10, `Closed`), suspension, ROC-calendar dates, directors and supervisors (a juristic person holding a seat is a `LegalEntity` officer). **A UBN not held answers an empty 200**, read as `NotAvailable`. Search asks status 01 and the ended 04, 05, 07, 08, 09, 10, 11 and 13, one call each under the pacing; never complete. | Owners, concerns beyond insolvency | Daily cap, no figure; paced 2 a second | Open Government Data License v1, attribution required. **The API guide requires an emailed usage notice and IP registration before use**; not in the demo |
 | GLEIF, `Sources.gleif` | Any firm with an LEI | Legal name, status, addresses, reported number and jurisdiction, parents, reporting exceptions. Kept as `CrossCheck`, never as a register. Only a record in the jurisdiction asked is attached. A number's list is read a page of 100 at a time up to 200; records past that are `Unread`, a gap, and none is attached. | | 60 a minute; unverified | CC0, as GLEIF states |
 
 ### Lookups behind a free key
@@ -157,26 +151,26 @@ None of these has been run live. Each takes its key as a `SourceKey`, or as `Cli
 
 | Source | Answers | Written from | Not offered | Pace | Licence |
 |---|---|---|---|---|---|
-| Companies House | `GB`, with a key | The bundled specs; see [what to check live](#what-to-check-live) | | 600 per 5 minutes, per its guide | Not checked |
+| Companies House | `GB`, with a key | Run live 2026-11-08; see [what to check live](#what-to-check-live) | | 600 per 5 minutes, per its guide | No rules on use, per Companies House; bans for exceeding 600 per 5 minutes |
 | Corporations Canada, `Sources.canada` | `CA` only, by corporation number or BN9 | `corporations-en.json`. Name history, status, registered office, directors. An unknown number answers 200 "could not find corporation", read as not held. | Search, owners, concerns | 60 a minute, published | OGL-Canada for the dataset |
 | NZBN API, `Sources.newZealand` | `NZ`, by NZBN or company number | The portal's OpenAPI. 17 status codes, addresses, directors, **shareholdings as legal owners**, insolvencies. A 404 is not held only with `errorCode` NZBN-404. | | Paced 2 a second | NZ Crown copyright, with credit |
-| Bolagsverket, `Sources.sweden` | `SE`, by organisation number | The devportal's OpenAPI and code lists. Deregistration reasons, proceedings, active flag. `ORGANISATION_FINNS_EJ` is `NotAvailable`, as Bolagsverket says the organisation may still exist. A fault in a block deciding standing leaves it `Unknown`. OAuth2 credentials go in a Basic header, unverified against the gateway. | Search, officers, owners | 60 a minute per user; not re-read | None stated |
+| Bolagsverket, `Sources.sweden` | `SE`, by organisation number | The devportal's OpenAPI and code lists. Deregistration reasons, proceedings, active flag. `ORGANISATION_FINNS_EJ` is `NotAvailable`, as Bolagsverket says the organisation may still exist. A fault in a block deciding standing leaves it `Unknown`. OAuth2 credentials go in a Basic header, unverified against the gateway. | Search, officers, owners | 60 a minute per user; not re-read | None stated; free, no agreement, per bolagsverket.se |
 | NTA corporate number, `Sources.japan` | `JP`, by 13-digit corporate number | The v4 specification. Process codes, close causes, head office. A 404 means the app ID is invalid. | Officers, owners, concerns | Paced 2 a second | NTA terms; the attribution sentence is in `Coverage.Licence` |
 | Zefix PublicREST, `Sources.zefix` | `CH`, by UID | `/v3/api-docs`. ACTIVE / BEING_CANCELLED / CANCELLED, legal form, domicile, deletion date. Basic credentials from the EHRA. | Officers, owners, concerns | Paced 2 a second | OGD: open use, source cited |
-| California SOS, `Sources.california` | `US-CA`, by entity number | Guide v1.0.4 (draft). Only two status words documented; a 400 is `NotAvailable`, as the guide gives it for both no entity and a bad request. **The portal says government agencies only.** | Officers, owners, concerns | Paced 2 a second | Terms not found |
+| California SOS, `Sources.california` | `US-CA`, by entity number | Guide v1.0.4 (draft). Only two status words documented; a 400 is `NotAvailable`, as the guide gives it for both no entity and a bad request. **The portal says government agencies only.** | Officers, owners, concerns | Paced 2 a second | None stated; the portal says government agencies only, approval required |
 | ABN Lookup, `Sources.australia` | `AU`, by ABN or ACN | The ABR's JSON samples. An active ABN is `Registered`, not `Active`: it isn't ASIC registration. No record for an ACN is `NotAvailable`. Names, state, postcode. A suppressed record is `NotAvailable`. | Officers, owners, concerns | Paced 2 a second | ABR Web Services Agreement |
 | NTS business status, `Sources.korea` | `KR`, by business number | The data.go.kr swagger. Continuing is `Registered` (tax registration), suspended `Unknown`, closed `Closed`; the check digit is checked. **No name or address.** | Search, officers, owners, addresses, concerns | 1,000,000 a day, published | No restriction on use |
-| Sudski registar, `Sources.croatia` | `HR`, by OIB or MBS | The OpenAPI v3.0.4. Name, seat, legal form, founding and deletion dates, bankruptcy and liquidation flags. OAuth2. | Search, officers, owners | 6 a minute, a third party's figure | None found |
+| Sudski registar, `Sources.croatia` | `HR`, by OIB or MBS | The OpenAPI v3.0.4. Name, seat, legal form, founding and deletion dates, bankruptcy and liquidation flags. OAuth2. | Search, officers, owners | 6 a minute, a third party's figure | Otvorena dozvola (NN 67/2017), per data.gov.hr; registration required |
 | GEMI open data, `Sources.greece` | `GR`, by GEMI number or AFM | The swagger. Names, address, legal form, persons as officers; status by the codebook's active flag, with liquidation and bankruptcy words deciding over it. Nine bare digits passing the AFM check are refused as ambiguous; a 404 counts only in GEMI's error-list shape. | Owners, concerns | 8 a minute, a third party's figure | ODC-BY-1.0 |
-| Firmenbuch HVD, `Sources.austria` | `AT`, by Firmenbuchnummer | `WebService-HVD.zip` v1.3. Name, address, legal form; `Closed` when deleted. **A SOAP fault sent with HTTP 500 reads as `Unavailable`, and nothing reads as not held.** | Officers, owners, legal facts | 429, no figure; paced 2 a second | CC BY 4.0 as reported; terms not read |
-| CVR, `Sources.denmark` | `DK`, by CVR number | "Kom godt igang med Elasticsearch". Name, address, composite status, life cycle. A timed-out or shard-incomplete answer is `Unavailable`. **The only endpoint is plain http, so the credentials travel unencrypted.** | Officers, owners, legal form | Paced 2 a second | Terms not read |
-| KRA PIN checker, `Sources.kenya` | `KE`, by company PIN | developer.go.ke. **Tax PIN status only**, not the business register. OAuth key and secret. | Addresses, search, officers, owners, concerns | Paced 2 a second | None found |
+| Firmenbuch HVD, `Sources.austria` | `AT`, by Firmenbuchnummer | `WebService-HVD.zip` v1.3. Name, address, legal form; `Closed` when deleted. **A SOAP fault sent with HTTP 500 reads as `Unavailable`, and nothing reads as not held.** | Officers, owners, legal facts | 429, no figure; paced 2 a second | CC BY 4.0, per data.gv.at's HVD record |
+| CVR, `Sources.denmark` | `DK`, by CVR number | "Kom godt igang med Elasticsearch". Name, address, composite status, life cycle. A timed-out or shard-incomplete answer is `Unavailable`. **The only endpoint is plain http, so the credentials travel unencrypted.** | Officers, owners, legal form | Paced 2 a second | CC BY 4.0, per data.gov.dk; advertising-protected firms not for direct marketing |
+| KRA PIN checker, `Sources.kenya` | `KE`, by company PIN | developer.go.ke. **Tax PIN status only**, not the business register. OAuth key and secret. | Addresses, search, officers, owners, concerns | Paced 2 a second | None found; free to approved developers under KRA's developer guidelines, not read |
 
 ### Bulk sources
 
 The host downloads the published files on its own schedule and passes them as streams with a `BulkFileDate` and a `CancellationToken`, through `BulkSources`. Files are read as published, zips included, with UTF-8 read strictly: a file with an invalid byte is refused rather than read with replacement characters. Nothing is called. Answers are as of the file's date, and a number held twice in one file is `NotAvailable`. Building the larger ones takes time and memory: Ukraine's whole uo.zip takes about 8.7 GB, Romania holds 4.2 million firms in about 52 s and 2.25 GB, and Estonia takes about 1.9 GB. Build each once per download and save it with `BulkIndexes`; `BulkDownloads` writes Ukraine's index streamed, at a 1.2 GB peak.
 
-Most users need few of these, so nothing is downloaded until asked. `BulkCatalogue.all` lists every bulk source with its publisher's page, a size for those with fixed links or a resolver, how often the file is replaced and its licence: a settings screen with a download button per source. `BulkDownloads` fetches seventeen of them into a folder the host chooses: eight at fixed links (`BulkDelivery.Links`), and nine whose file names change (`BulkDelivery.Resolved`), found at download time through the portal's official listing:
+Most users need few of these, so nothing is downloaded until asked. `BulkCatalogue.all` lists every bulk source with its publisher's page, a size for those with fixed links or a resolver, how often the file is replaced and its licence: a settings screen with a download button per source. `BulkDownloads` fetches sixteen of them into a folder the host chooses: seven at fixed links (`BulkDelivery.Links`), and nine whose file names change (`BulkDelivery.Resolved`), found at download time through the portal's official listing:
 
 ```fsharp
 use downloads = BulkDownloads.Create("C:/data/registers")
@@ -193,7 +187,7 @@ let! registry = downloads.LoadAsync(estonia, ct)                 // add it to Ca
 - A file over four times its catalogued size is refused. A resolved file's size is the one its listing states, or the source's stated size when the listing states none; never the download's own Content-Length. A listing whose sizes add up to over four times the source's stated size is refused before anything is fetched.
 - `ResolveAsync` reads a resolved source's listing and returns the files a download would fetch, with their names on the portal and dates, without downloading. `ResolvedFilesOf` gives the files of the download saved now.
 - When a listing can't be read, or names none of the files, the download fails and its message says how to get them by hand (`BulkResolver.ByHand`); pass them to `BulkSources`.
-- Three stay `BulkDelivery.ByHand`: Belgium needs a registration, Florida SFTP, and Moldova's page has no API or machine listing.
+- Four stay `BulkDelivery.ByHand`: Belgium needs a registration, Florida SFTP, Moldova's page has no API or machine listing, and the SII nómina needs SII's approval, as its site terms allow personal non-commercial use only.
 
 | Resolved source | Listing | Files picked | Stated size |
 |---|---|---|---|
@@ -207,7 +201,7 @@ let! registry = downloads.LoadAsync(estonia, ct)                 // add it to Ca
 | `CL-RES` Chile | datos.gob.cl CKAN `package_show` registro-de-empresas-y-sociedades | every yearly CSV, 2013 to now, since a formation of any year can be asked for | 250 MB |
 | `AR-C` Buenos Aires | datos.jus.gob.ar CKAN `package_show` | the newest "IGJ - YYYY semestre N" zip, by the year and half its name states | 162 MB, a ceiling, as CKAN states no size |
 
-`BulkIndexes.saveAsync` writes a built registry to a folder, and `BulkIndexes.openAsync` opens it in milliseconds as a registry that answers exactly as the built one, holding file handles rather than records; dispose it to close them. Lookups are positional reads, safe in parallel. A search reads the whole names file. `BulkIndexes.saveUkraineAsync` writes Ukraine's index as uo.zip streams, never holding every record. On the real files:
+`BulkIndexes.saveAsync` writes a built registry to a folder, and `BulkIndexes.openAsync` opens it in milliseconds as an `IBulkRegistry` that answers exactly as the built one, holding file handles rather than records; dispose it to close them. Lookups are positional reads, safe in parallel. A search reads the whole names file. `BulkIndexes.saveUkraineAsync` writes Ukraine's index as uo.zip streams, never holding every record. On the real files:
 
 | | Build in memory | Save | Index on disk | Open | Heap after open | Lookup | Search, whole file |
 |---|---|---|---|---|---|---|---|
@@ -223,19 +217,19 @@ let! registry = downloads.LoadAsync(estonia, ct)                 // add it to Ca
 | AJPES PRS list, `BulkSources.sloveniaAsync` | `SI`, by registration number | **Not run on the real file.** The portal answered curl with 407 on 2026-11-08 but answered BulkDownloads' client, whose listing named opsiprs.csv of 126 MB. Number, name, legal form, address; `Registered` with no word. | Officers, owners, concerns | CC BY 4.0 |
 | CBE/KBO, `BulkSources.belgiumAsync` | `BE`, by enterprise number (mod-97) | **Not run on the real file: it needs a registration.** Cookbook R018.00 and the official code table. **Active entities only.** Name and address type codes unverified. | Officers, owners | CBE licence: reuse only for the purpose registered, no direct marketing |
 | ЄДР, `BulkSources.ukraineAsync` | `UA`, by EDRPOU | The real uo.zip of 2026-11-03 and its XSD. 6 states, founders (with a gap, as their stakes are in hryvnias), **beneficial owners with percentages**, managers. | Addresses (withheld in wartime) | CC BY |
-| Division of Corporations, `BulkSources.floridaAsync` | `US-FL`, by document number | **Not run on the real file** (SFTP); the fixed-width layout. Active / inactive, filing type for the role, up to 6 officers, agent. Pass cordata.zip as one stream; a daily file replaces quarterly records, and a number in two quarterly parts is repeated. A record flagged for more than six officers answers `NotAvailable` for officers. Date format assumed. | Owners, concerns | None stated |
-| Corporations downloads, `BulkSources.alaskaAsync` | `US-AK`, by entity number | The real downloads. Officials split into officers and owners; only holders of 5% or more are named, so a gap is stated. The index page is behind a captcha; terms unread. | Concerns, owner shares | None stated |
+| Division of Corporations, `BulkSources.floridaAsync` | `US-FL`, by document number | **Not run on the real file** (SFTP); the fixed-width layout. Active / inactive, filing type for the role, up to 6 officers, agent. Pass cordata.zip as one stream; a daily file replaces quarterly records, and a number in two quarterly parts is repeated. A record flagged for more than six officers answers `NotAvailable` for officers. Date format assumed. | Owners, concerns | None stated; free downloads for informational purposes |
+| Corporations downloads, `BulkSources.alaskaAsync` | `US-AK`, by entity number | The real downloads. Officials split into officers and owners; only holders of 5% or more are named, so a gap is stated. The index page is behind a captcha; terms unread. | Concerns, owner shares | None found; the download page is behind a captcha |
 | ASIC company dataset, `BulkSources.asicCompaniesAsync` | `AU`, by ACN or ARBN | The real weekly zip, 4.5 million rows, built in about 18 s. 11 statuses, former names. Deregistered over a year ago are dropped, so absence is `NotAvailable`. | Addresses, officers, owners, concerns | CC BY 3.0 AU |
-| DNIT RUC list, `BulkSources.paraguayAsync` | `PY`, by RUC | The real ruc0.zip. 5 statuses; active is `Registered` as a tax registration. **Individuals included.** A malformed row withholds its RUC; absence is not held only with all ten files and every row tied to its RUC, which the real files of 2026-11-01 aren't, so absence reads `NotAvailable`. | Addresses, officers, owners, concerns | None stated |
-| Receita Federal CNPJ, `BulkSources.brazilAsync` | `BR`, by CNPJ or its base | Parts of the real files and the code tables. Situação and special situations, head office or branch, **administrators as officers, partners as owners**, with gaps for their shares and for Socios parts not passed. | Owner shares | Unverified |
+| DNIT RUC list, `BulkSources.paraguayAsync` | `PY`, by RUC | The real ruc0.zip. 5 statuses; active is `Registered` as a tax registration. **Individuals included.** A malformed row withholds its RUC; absence is not held only with all ten files and every row tied to its RUC, which the real files of 2026-11-01 aren't, so absence reads `NotAvailable`. | Addresses, officers, owners, concerns | None stated; the site says all rights reserved |
+| Receita Federal CNPJ, `BulkSources.brazilAsync` | `BR`, by CNPJ or its base | Parts of the real files and the code tables. Situação and special situations, head office or branch, **administrators as officers, partners as owners**, with gaps for their shares and for Socios parts not passed. | Owner shares | Unverified: dados.gov.br couldn't be read |
 | Registro de Empresas y Sociedades, `BulkSources.chileAsync` | `CL`, by RUT | The real yearly CSVs. Simplified-regime formations only, so `Registered` with no word and absence `NotAvailable`; an act other than a formation is `Unknown`. | Officers, owners, concerns, status | CC BY |
-| State Register of Legal Units, `BulkSources.moldovaAsync` | `MD`, by IDNO (check digit) | The real company.xlsx of 2026-11-02, 304,013 rows in 6 s. No status word: a liquidation date is `Dissolved`, an insolvency administrator `InInsolvency`, a liquidator `WindingUp`. Leaders with roles; **founders with percentages**, not said to be people or companies, so a gap. Enterprises only, so absence is `NotAvailable`. | Concerns beyond insolvency | None stated |
-| APR, `BulkSources.serbiaAsync` | `RS`, by matični broj | The real 57.7 MB answer of 2026-10-31, 133,793 companies. 4 status words; foreign branches are establishments; municipality only. Deleted companies are left out, so absence is `NotAvailable`. | Officers, owners | Serbian Open Data Licence; not re-read |
+| State Register of Legal Units, `BulkSources.moldovaAsync` | `MD`, by IDNO (check digit) | The real company.xlsx of 2026-11-02, 304,013 rows in 6 s. No status word: a liquidation date is `Dissolved`, an insolvency administrator `InInsolvency`, a liquidator `WindingUp`. Leaders with roles; **founders with percentages**, not said to be people or companies, so a gap. Enterprises only, so absence is `NotAvailable`. | Concerns beyond insolvency | None stated; the site terms allow reuse under the law, source named |
+| APR, `BulkSources.serbiaAsync` | `RS`, by matični broj | The real 57.7 MB answer of 2026-10-31, 133,793 companies. 4 status words; foreign branches are establishments; municipality only. Deleted companies are left out, so absence is `NotAvailable`. | Officers, owners | Serbian Open Data Licence, per data.gov.rs |
 | e-Registar Brčko, `BulkSources.bosniaBrckoAsync` | `BA-BRC`, by MBS or JIB | The real export, 6,690 subjects. 4 status words. Current subjects only. | Officers, owners, concerns | None stated; the footer says all rights reserved |
 | IGJ, `BulkSources.argentinaCabaAsync` | `AR-C`, by IGJ number or CUIT | The real half-yearly zip, 1,076,718 entities in 12 s. Struck off is `Closed` with its reason; authorities as officers; **partners as owners** without shares. 10,927 repeated CUITs are `NotAvailable`. | Concerns | CC BY 4.0 |
-| SII nómina, `BulkSources.chileSiiAsync` | `CL`, by RUT (check digit) | The real zips of 2026-08-03, 3.4 million RUTs in 15 s and about 1.6 GB. An end date is `Closed`, else `Registered`. Tax registration, not a company register. | Officers, owners, concerns | None stated; SII disclaims accuracy |
+| SII nómina, `BulkSources.chileSiiAsync` | `CL`, by RUT (check digit) | The real zips of 2026-08-03, 3.4 million RUTs in 15 s and about 1.6 GB. An end date is `Closed`, else `Registered`. **Fetched by hand:** `BulkDownloads` doesn't download it; with SII's express approval, pass the zips to `BulkSources.chileSiiAsync`. Tax registration, not a company register. | Officers, owners, concerns | None stated; site terms: personal non-commercial use, reproduction needs SII's approval |
 | SUNAT padrón reducido, `BulkSources.peruAsync` | `PE`, by company RUC (20…) | The real file of 2026-11-07, 2.4 million companies. 13 status words; active is `Registered` as a tax registration, suspended or pending `Unknown`; NO HABIDO is an undeliverable address. Ended RUCs are included, so absence is not held. Tax registration. | Officers, owners | None stated |
-| Supercias directorio, `BulkSources.ecuadorAsync` | `EC`, by RUC or expediente | The real xlsx of 2026-11-06, 229,616 rows. 15 legal situations; legal representative; foreign branches with their country. Cancelled companies left out, so absence is `NotAvailable`. | Owners, concerns | None stated |
+| Supercias directorio, `BulkSources.ecuadorAsync` | `EC`, by RUC or expediente | The real xlsx of 2026-11-06, 229,616 rows. 15 legal situations; legal representative; foreign branches with their country. Cancelled companies left out, so absence is `NotAvailable`. | Owners, concerns | None stated; on datosabiertos.gob.ec with no licence |
 | FNS SME register, `BulkSources.russiaSmeAsync` | `RU`, by OGRN or INN | **Not run on the full file** (2.25 GB): the XSD and its first entries. Micro, small or medium enterprise; region only. **Small and medium businesses only**, so absence proves nothing. | Officers, owners, concerns | FNS open data terms, attribution required |
 
 ### Coverage gaps
@@ -260,7 +254,7 @@ jurisdiction with no route are `NoRoute`.
 - `SearchPeopleAsync(name, jurisdiction, ct)` answers `Evidence<Availability<PersonSearchResult>>`: `Matches`, `TotalMatches` (records the register's own search found, in its own unit) and `Complete`. `PersonSearch` is a `Support` saying how far it reaches.
 - A `PersonMatch` holds the name and role as published, `Current` only when the register says so, the company's name, number and status on that register, and `AppointedOn` and `EndedOn` where given. It says the register holds the name, not that it is the person meant.
 - A search never says "not a director". `Complete` is true only when the register says it returned every record its search found, so an empty list is no clear.
-- The name is `Firstname Lastname` or `Lastname, Firstname` (`PersonName.tryParse`). The register's own search goes first, as contains or full text as each supports; then `PersonName.matches` keeps a role only when every word asked, after `NameMatching.normalise`, is a whole word of the published name, in any order. A masked name, holding an asterisk, never matches, and Poland's KRS, which masks every name, has no person search.
+- The name is `Firstname Lastname` or `Lastname, Firstname` (`PersonName.tryParse`). The register's own search goes first, as contains or full text as each supports; then `PersonName.matches` keeps a role only when every word asked, after `NameMatch.normalise`, is a whole word of the published name, in any order. A masked name, holding an asterisk, never matches, and Poland's KRS, which masks every name, has no person search.
 - A name with no letter or digit is `InvalidRequest`, and a jurisdiction outside coverage is `OutsideCoverage`; neither sends anything.
 
 | Register | Searches | Calls | Complete | Run live |
@@ -271,9 +265,9 @@ jurisdiction with no route are `NoRoute`.
 | District of Columbia, `Sources.districtOfColumbia` | Beneficial owners (layer 2) by `UPPER(NAME) LIKE`; the layer carries the business name, file number and status | 1 | Under 100 and not cut short | 2026-11-08 |
 | Pennsylvania, `Sources.pennsylvania` | Governors and officers in xvd7-5r2c, each word in a name part | 1 | Never: active registrations only | 2026-11-08 |
 | Latvia, `Sources.latvia` | CKAN full text on the officers and beneficial owners resources; companies joined from the register | 2 or 3 | Both totals read | 2026-11-08 |
-| Companies House, `CompaniesHouseRegistry` | `/search/officers?q=`, then the first 50 appointments of up to 20 officers named as asked | 1 to 21 | Every officer and appointment read | Not run: from the bundled specs |
+| Companies House, `CompaniesHouseRegistry` | `/search/officers?q=`, then the first 50 appointments of up to 20 officers named as asked | 1 to 21 | Every officer and appointment read | 2026-11-08 |
 
-A `PersonMatch` carries no date of birth, so two people of one name aren't told apart; the raw answer keeps what the register gave. `Api.DisqualifiedOfficers.searchAsync` is Companies House's separate search of disqualified directors. The other adapters don't implement `IPersonSearch`.
+A `PersonMatch` carries no date of birth, so two people of one name aren't told apart; the raw answer keeps what the register gave. The other adapters don't implement `IPersonSearch`.
 
 ## Sanctions
 
@@ -457,13 +451,15 @@ Never scrape a register whose terms forbid it: declare a `CoverageRoute`. `Regis
 
 ## How Companies House fills the contract
 
-It reads the [Companies House API](https://developer-specs.company-information.service.gov.uk/). Everything here comes from the bundled specs and the enumerations, and none of it has been run live.
+It reads the [Companies House API](https://developer-specs.company-information.service.gov.uk/). It comes from the bundled specs and the enumerations, checked against live answers on 2026-11-08.
 
 - **Standing** reads `company_status` and `company_status_detail` as the [enumerations](https://github.com/companieshouse/api-enumerations) spell them.
   Active with `active-proposal-to-strike-off` is `ActiveWithConcern`. Open and registered are `Registered`.
 - **Concerns** read the profile's flags. Overdue accounts is `next_accounts.overdue` or the deprecated `accounts.overdue`. Annual filing is
-  `confirmation_statement.overdue` or `annual_return.overdue`. Insolvency history is `has_insolvency_history`, `has_been_liquidated` or a `links.insolvency`. A flag the
-  profile lacks is `Unconfirmed`, and one that isn't a boolean fails the answer.
+  `confirmation_statement.overdue` or `annual_return.overdue`. Insolvency history is `has_insolvency_history`, `has_been_liquidated` or a `links.insolvency`; it is clear when
+  `has_insolvency_history` is false, there is no link, and `has_been_liquidated` is false or missing. Any other flag the profile lacks is `Unconfirmed`, except annual filing on an
+  `oversea-company`, which files no confirmation statement. A `uk-establishment`'s flags stay `Unconfirmed` on its record, as they are its overseas
+  company's; a case reads them there and adds no gap for them on the establishment. A flag that isn't a boolean fails the answer.
 - **Role** reads `type`: `oversea-company` and `registered-overseas-entity` are `ForeignRegistration`, `uk-establishment` is `Establishment`, and any other is `Home`. `HomeRegistration` reads
   `foreign_company_details`, with `external_registration_number` for a number it lacks. `EstablishmentOf` reads `branch_company_details.parent_company_number`.
 - **Filings** read filing history. `description_values.capital` gives a capital figure as `Issued`, and one that isn't a number stays in the raw answer. A document is read as `application/pdf`.
@@ -479,125 +475,60 @@ It reads the [Companies House API](https://developer-specs.company-information.s
   inconsistent are `Unavailable`. An answer that can't be read, or a list past the page cap, is `UnreadableAnswer`.
 - A number that can't be one, including one that has lost its leading zeros, is `InvalidRequest` and isn't sent.
 
-## Companies House only
+### How its client reads
 
-`CompanyDueDiligence.CompaniesHouse.Api` holds the full records, with `Raw` for the fields they leave out, and the UK-only data outside the contract. Each call returns
-`Task<Result<_, CompaniesHouseFailure>>`, with `ValueNone` for a 404.
-
-| Module | Calls |
-|---|---|
-| `Api.Companies` | `getAsync` |
-| `Api.Search` | `companiesAsync`, `companiesReadAsync`, `officersAsync`, `officersReadAsync`, `readAsync` |
-| `Api.Officers`, `Api.Psc`, `Api.PscStatements`, `Api.Charges` | `pageAsync`, `allAsync` |
-| `Api.Appointments` | `pageAsync`, `allAsync`, by an officer's id, which `CompanyOfficer.OfficerId` holds |
-| `Api.UkEstablishments` | `getAsync`, one answer, as the spec gives this list no paging and no total |
-| `Api.DisqualifiedOfficers` | `searchPageAsync`, `searchAsync`, `detailsAsync` |
-| `Api.FilingHistory` | `pageAsync`, `allAsync`, with optional categories |
-| `Api.Insolvency` | `getAsync` |
-| `Api.Documents` | `metadataAsync`, `locationAsync`, `contentAsync` |
-| `Api.Paging` | `allAsync`, `allUpToAsync`, `allCountedAsync` over any page function |
-| `Api` | `getJsonAsync` for any other Public Data path |
-
-A 404 on a sub-resource says nothing is held at that address, which doesn't tell a company without records from a number that doesn't exist:
-`Api.Companies.getAsync` does.
-
-Other Public Data paths have no typed call and go through `getJsonAsync`, including exemptions, registers, single items of a list, and the officer, dissolved,
-alphabetical and advanced searches.
-
-`DisqualifiedOfficers.searchAsync` goes by name, so it can't say whether a person is disqualified. `DisqualificationSearch` is `PossibleMatches` to check by hand against
-`detailsAsync`, `NoNameMatch` when everything was read and no entry matched that wording, or `Inconclusive`. None of them is a definite hit or a clear, and a failed
-search is an `Error`.
-
-`CompaniesHouseFailure`:
-
-- `InvalidRequest reason`: not sent.
-- `KeyRefused body`: a 401.
-- `RateLimited limit`: a 429 after the retries, or a wait past `Pacing.LongestWait`, in which case nothing was sent. `RetryAfter`, `ResetsAt`, `Limit`, `Window` and
-  `Remaining` are read from `Retry-After` and `X-Ratelimit-*` if present. The rate limit guide names no headers. `RateLimit.wait` uses them, or else the guide's period of
-  five minutes, in which an application gets 600 requests.
-- `RedirectRefused(status, reason)`: a redirect the client didn't follow.
-- `ApiError(status, body)`: any other status.
-- `IncompleteList(read, expected)`, `RepeatedPage startIndex`, `InconsistentList(startIndex, reason)` and `ListTooLong(pages, read, expected)`: see paging.
-- `TransportError exn`: no complete answer, including a timeout.
-- `InvalidResponse answer`: a success answer that can't be read. `answer.Body` can hold personal data: `describe` and printing leave it out.
-
-`CompaniesHouseFailure.action` says `RetryLater` or `FixRequest`. Cancelling your token throws `OperationCanceledException`, during a wait as well.
-
-### Pacing
-
-A client spaces the calls that carry its key, using nothing beyond the base libraries. `Pacing.documented` allows the guide's 600 calls in any five minutes, then
-waits for the oldest to leave the window. An answer saying none are left holds the client until its reset, cut to the window if the reset is further off, and without both
-headers nothing changes.
-
-A 429 holds the client for what the answer says, or for the guide's period, or at least a second, and is asked again up to `Retries` times, so it doesn't lose the pages read.
-A wait longer than `LongestWait` isn't made and the call is `RateLimited`, which is how to keep a web request from sleeping: set `LongestWait` to what it can afford.
-Pass your own with `CompaniesHouseClient.Create(credentials, endpoints, timeout, pacing)` or `createPaced`. The limit belongs to the key and the window to one client, so
-clients or processes sharing a key need to share out `Calls`. Waits don't count against the timeout. A signed document URL isn't paced.
-
-### Paging
-
-`allAsync` follows `start_index` from 0, asking for 100 to a page and moving on by the number of items received, since the docs state no
-maximum. A list answer must hold a readable `total_results` or `total_count`, or it is `InvalidResponse`. A list ends only on an empty answer or a 404
-at its total, which costs one more call and is what brings an understated total to light. Part of a list is never returned as all of it:
-
-- ending below the total is `IncompleteList`;
-- a page seen before is `RepeatedPage`;
-- a total or counts that change between pages, an item that moves to a later page, and more items than the total are `InconsistentList`;
-- needing more than `Paging.MaxPages` calls, 100, is `ListTooLong`.
-
-Officers, PSCs and PSC statements must also state their active and ended counts, as their specs require. Those must add up to the total and match the items. The pages aren't
-one snapshot, and a change that leaves the total and every item in place can't be seen. Charges and filing history state no counts this client checks.
-
-A failure left after the retries loses the pages read. An end date that can't be read, and a PSC with neither a kind nor a name, fail the answer they are in.
-
-`Search.readAsync` reads a search by name up to `Search.MostRead`, 1000 items, and `SearchRead.Complete` says whether that was all of them. Stopping short, or a 416 after the
-first page, isn't a failure there: the docs give searches no way to read everything.
-
-### Documents
-
-`contentAsync` sends the key and an `Accept` of the content type to the Document API, which answers with a 302. It then reads the `Location` through
-a client with no key to send, whichever host that is. It follows no further redirect, and refuses a `Location` weaker than the endpoint's scheme.
-A failure on that second hop is an `ApiError` without its body, never `ValueNone`. `locationAsync` stops at the URL, to stream a large
-document; printing a `DocumentLocation` hides its signature, so keep its `Uri` out of logs. Take a document id from
-`FilingHistoryItem.DocumentId`: it comes from the link's path, and the link's host isn't used.
+- **Pacing.** Calls carrying the key keep to the guide's 600 in any five minutes, then wait for the oldest to leave the window. An answer saying none are left
+  holds the client until its reset, cut to the window. A 429 holds it for what the answer says, or the guide's period, or at least a second, and is asked again
+  twice, so a list doesn't lose the pages read; a wait past five minutes isn't made and the call is `RateLimited`. The limit belongs to the key, so make one
+  registry per key and keep it. Waits don't count against the 20-second request limit. A signed document URL isn't paced.
+- **Paging.** A list is read from `start_index` 0, 100 to a page, moving on by the items received. An answer must state a readable total. A list ends only on an
+  empty answer or a 404 at its total, one more call that brings an understated total to light. Part of a list is never read as all of it: ending below the
+  total, a page seen before, a total or counts that change between pages, an item that moves to a later page, more items than the total, or more than 100 calls
+  fail the read. Officers, PSCs and PSC statements must also state active and ended counts that add up. A search reads up to 1000 items, and says whether that was all.
+- **Documents.** A filing is fetched from the Document API with the key, which answers with a redirect to a signed URL; that URL is read without the key, follows
+  no further redirect, and is refused when weaker than https. A document id comes from the filing link's path; the link's host isn't used.
+- **Not found.** A company profile is not held only on Companies House's own not-found error. A 404 on a list or sub-resource says nothing is held at that address.
 
 ## What to check live
 
 ### Companies House
 
-None of this could be checked without a key. The client fails closed on each, so a wrong guess shows up as gaps rather than as clean companies.
+Run live on 2026-11-08 on Tesco PLC, BP P.L.C., companies in liquidation, administration and dissolved, overseas companies (Norway, California, New York),
+an overseas entity, a UK establishment, an LLP and an unknown number, and on the sandbox with companies from its test data generator. A Developer Hub
+test key reaches only the sandbox; a live key answers 401 there. What the answers showed:
 
-From forum posts, not the docs:
+- The rate limit headers: `X-Ratelimit-Limit` (600), `-Remain`, `-Reset` in Unix seconds, and `-Window` (`5m`).
+- At `start_index` equal to its total, the officer list answers no items and a total of 0, and the PSC list no items and its usual counts. Both end the list.
+- For a number it doesn't hold, a profile answers 404 with a `message` holding `Resource not found for company profile`, and the officer list, PSC list and
+  filing history answer 200 with empty lists. An empty officer list or filing history is checked against the profile, unless the registry has read it.
+- Officer and PSC counts add up to the total and match the items; the officer list carries `inactive_count`.
+- `has_been_liquidated` is missing from most profiles made since about 2015, every LLP and recent overseas company in a sample of 54.
+  `has_insolvency_history` was on every one, so with no `links.insolvency` it settles insolvency history. `registered_office_is_in_dispute` was missing on 2.
+- Overseas companies carry no confirmation statement, so annual filing doesn't apply to them. A UK establishment's profile carries no filing flags: they are its overseas company's.
+- Filing history pages hold at most 100. BP had 15,553 filings and Tesco 8,372; `FilingsAsync` reads the newest 1,000, and its `FilingHistory` says how many there are and that it stopped; a case records that as a gap. Capital filings (allotments, buy-backs) aren't highlighted: they were 824 of Tesco's newest 1,000.
+- Search snaps `start_index` down to a multiple of `items_per_page`; the company lists don't. A 416 at `start_index` 1000 on search.
+- `uk-establishments` answers 200 with an empty list for a company with none and states no total; for an unknown number it answers 404.
+- `foreign_company_details` holds `legal_form`, `governed_by` and `originating_registry` with `country` and sometimes `name`, such as "Secretary Of State,
+  State Of California". `registration_number` can be "N/A", which is no number.
+- A corporate PSC's `place_registered` and `country_registered` hold places. Address parts can be empty strings; they are left out.
+- An insolvency record can hold `"cases": []` with a `status` such as `liquidation`.
+- A document's content answers 302 to a signed S3 URL on `s3.eu-west-2.amazonaws.com`.
+- Officers' `identity_verification_details` are present and read.
 
-- The `X-Ratelimit-Remain`, `-Limit`, `-Reset` and `-Window` headers, and that `-Reset` is in Unix seconds. `X-Ratelimit-Remaining` is read as well in
-  case. Missing or unusable, they change nothing.
-- A 416 at `start_index` 1000 on search, which `Search.MostRead` is set from. The docs state no limit.
-- Disqualified officer ids not linking to officer ids, which is why a search goes by name.
+Still unverified:
 
-Unverified assumptions about answers:
-
-- What a list answers at `start_index` equal to its total. An empty list or a 404 ends it; a 400, or an answer without `items` or the counts, fails every
-  read of that list.
-- That active and ended counts add up to the total and match the items. `inactive_count` isn't in the spec, and is added if present.
-- That the flags are all present on live profiles, including the deprecated `has_insolvency_history` and `has_been_liquidated`. A missing one is
-  `Unconfirmed`, so any commonly missing one sends good companies to review. Company types that file no accounts will read that way too.
-- An officer's `identity_verification_details`, whose definition (`officerChanges.json`) answers 404, so it is read by the names in `pscModels.json`.
-- Whether `place_registered` holds a place or a register's name. `EntityRegistration.Register` holds it either way.
-- Whether a long UK establishments list is cut off, since the spec gives it no paging or total. A total in the answer is checked if there is one.
+- Disqualified officer ids not linking to officer ids, which is why a search goes by name (forum posts).
 - Whether `search.json`'s `total_results`, described as further results, is the whole total. `Complete` assumes it is.
 - The classification of change-reporting beneficial owner statements as `ChangesOnly`, which is no gap.
-- The shape of charges and insolvency answers, the 404 on sub-resources and the `Location` of a document.
-- `foreign_company_details`: the spec names `company_type` and answers are said to hold `legal_form`, so both are read. What `originating_registry` holds for a US company, which decides whether a state can be placed, is unseen.
+- The shape of charges answers.
 - `description_values.capital` on a filing, which the bundled spec doesn't describe.
-- The filing categories that mark a document as insolvency or constitutional. The spec's enum is shorter than what answers are said to hold. A category not listed is `Other`, and isn't highlighted.
-- That a `uk-establishments` 404 means none. It reads as a gap until seen.
 
-Choices made without data: `Paging.MaxPages` of 100, and the retry count and longest wait in `Pacing.documented`.
+Choices made without data: the cap of 100 calls a list, the 1,000 filings read, and the two retries and longest wait of five minutes after a 429.
 
 ### The other sources
 
 Each row of the [source tables](#sources) says what was run live, what was written from a spec, and which status words or fields are unverified. A source
-behind a key hasn't been run, and its first live answers decide whether its mapping holds. Earlier notes on the first sources:
+behind a key other than Companies House hasn't been run, and its first live answers decide whether its mapping holds. Earlier notes on the first sources:
 
 - **Malta:** the licence, and a beneficial owner route. A rate limit: none is published and none was met. An `Overseas` company's record holds no pointer to its home record, so it reads as a gap.
 - **France:** the data licence. A company under partial diffusion wasn't met live: the rule that it hides the address comes from the spec. Category `31xx` as a foreign company comes from INSEE's table. The beneficial owner route.
@@ -607,7 +538,7 @@ behind a key hasn't been run, and its first live answers decide whether its mapp
 - **Sanctions:** whether OFAC's `cons_alt.csv` and `cons_add.csv` have the shapes of `alt.csv` and `add.csv`: they weren't downloaded. Dates of birth in OFAC's remarks can run past the file's field limit into `sdn_comments.csv`, which isn't read.
 - **Vendors:** neither mapping has run on a live answer. Experian's is typechecked. Plaid's is typechecked and run on answers shaped from its OpenAPI spec.
 - **Routes:** `CoverageRoutes` are research notes, and Delaware's three status words haven't been seen from a paid source.
-- **Name match queries:** the Exact and StartsWith queries of the `INameMatchSearch` registers (Socrata and ArcGIS `LIKE` patterns, Oregon's grouped query) ran against fake handlers only.
+- **Name match queries:** the `INameMatchSearch` patterns were run live on 2026-11-08 against Colorado, Connecticut, New York, Texas, DC, Oregon, Pennsylvania and Colombia. New York's Exact search timed out once at 30 s and answered on a retry.
 
 ## Secrets and redirects
 
@@ -616,13 +547,18 @@ The sources other than Companies House keep no cookies and don't follow redirect
 query string (ABN Lookup, NTS, NTA) is taken out of failures, and out of `Raw` where the answer could echo it. Denmark's CVR has only a plain http endpoint,
 so its credentials travel unencrypted: weigh that before using it. A 401 is `AccessRefused`, and a source behind a token asks for a new one once first. A handler passed to `SourceConnection` that follows redirects raises `ArgumentException`, except in a browser, where only keyless sources run.
 
-Printing `Credentials` shows no key. The key goes only to the hosts in `Endpoints`, on their scheme, and any other address is `InvalidRequest`.
-`CompaniesHouseClient.CreateHandler()` doesn't follow redirects. A handler you pass to `CompaniesHouseClient.create` stays yours, is never disposed here,
-and must not follow them either. `Create(credentials, endpoints, timeout)` limits each HTTP request, so one page of a list and each hop of a document;
-without it the limit is `HttpClient`'s default of 100 seconds.
+`Sources.companiesHouse` sends its key only to Companies House's API and Document API hosts, over https, through the connection's handler, which doesn't follow redirects. Each HTTP request is limited to 20 seconds.
 
 Companies House asks that keys stay out of source code. Getting one means registering an application of type "API Key" on the
 [Developer Hub](https://developer.company-information.service.gov.uk/).
+
+## Versioning
+
+From 1.0.0 the package follows semantic versioning, with these rules for what a minor version may add:
+- **Union cases.** Cases may be added to any union except `Availability`, `GapReach`, `LeiParentLevel`, `DiscrepancyLabel` and `NameMatch`. Match the others with a wildcard, or use their helpers (`RegistryFailure.describe`, `isTemporary`, `CompanyStanding.isActive`).
+- **Record fields.** Fields may be added to records. Build the records a host or adapter fills from `Company.create`, `RegistryCoverage.create`, `Evidence.create`, `CaseSources.ofRegistries`, `CaseStart.create`, `VendorCheck.create` and `InvestigationOptions.defaults` with `{ X with ... }`, so a new field doesn't break the source. Code compiled against an older version needs rebuilding.
+- **Interfaces.** `ICompanyRegistry`, `INameMatchSearch`, `IPersonSearch`, `IFilingRegister`, `IDocumentReader`, `ILeiCrossCheck` and `IBulkRegistry` don't gain members: a new capability is a new interface a source opts into.
+- **Stored cases.** A case's JSON uses the type and case names. A change to them raises `CaseFile.CurrentSchemaVersion`, and `CaseJson.ofJson` upgrades an older file step by step; a file from a newer version is refused.
 
 ## Left out
 
@@ -644,15 +580,15 @@ tolerates new members, as the Developer guidelines ask.
 
 `samples/CompanyDueDiligence.Web` is a Bolero (F# on Blazor WebAssembly) page that runs this library in the browser.
 - It opens cases against the 15 keyless registers whose servers allow calls from a web page.
-- Its Companies page finds a company by name and a person by name across the registers switched on, at once. Results are grouped by register, five to a register until "Show all", with the registers that gave none on one line; chips under each search box narrow it to some registers. A person's match opens the company with "Look up". PEP status comes from a vendor's screening, not a register.
+- Its Companies page finds a company by name and a person by name across the registers switched on, at once. Results are grouped by register, five to a register until "Show all", with the registers that gave none on one line; a register picker beside each search box asks all of them, the default, or one. A person's match opens the company with "Look up". PEP status comes from a vendor's screening, not a register.
 - Its name search has a Match select: Exact name, Starts with (the default) or Contains.
-- Deep links: `#/company/<code>/<number>` (such as `#/company/FI/2990791-7`), `#/search/<term>` with `?match=exact` or `?match=contains`, and `#/person/<name>`, URL-encoded, open the page at that lookup or search, on load and on a hash change. Hash routes need no server rewrite, so they work under the GitHub Pages sub-path. A lookup or search run from the page puts its link in the address bar, and "Copy link" copies it; where the browser refuses the clipboard, the link is left in the address bar. A link to a register switched off in Settings is still looked up, with a note; an unknown code is an error.
-- Companies House (`GB`) needs a JavaScript key set in Settings, with a "Get a key" link to the Developer Hub, kept in this browser and sent only to Companies House. With one, GB is listed first, in the picker, the switches, both searches and cases; a refused key reads "Companies House refused the key". It has never been run live.
+- Deep links: `#/company/<code>/<number>` (such as `#/company/FI/2990791-7`), `#/search/<term>` with `?match=exact` or `?match=contains`, and `#/person/<name>`, each with `?register=<code>` for one register, URL-encoded, open the page at that lookup or search, on load and on a hash change. Hash routes need no server rewrite, so they work under the GitHub Pages sub-path. A lookup or search run from the page puts its link in the address bar, and "Copy link" copies it; where the browser refuses the clipboard, the link is left in the address bar. A link to a register switched off in Settings is still looked up, with a note; an unknown code is an error.
+- Companies House (`GB`) needs a JavaScript key set in Settings, with a "Get a key" link to the Developer Hub, kept in this browser and sent only to Companies House. With one, GB is listed first, in the picker, the switches, both searches and cases; a refused key reads "Companies House refused the key". Its JavaScript key route hasn't been run live; the API key route has.
 - Its settings screen switches each register, and the GLEIF cross-check, on or off. The choice is kept in the browser. A case follows owners only into registers switched on; anything else becomes a gap.
 - Its bulk sources screen lists the catalogue without downloading: building an index of millions of rows on a browser's one thread freezes the page for minutes.
 - Registers behind a key, and bulk files, need a desktop or server host, where keys stay private and files are kept in a folder.
 
-`.github/workflows/pages.yml` runs the library's tests, publishes the page and deploys it to GitHub Pages. It needs Pages set to "GitHub Actions" in the repository settings. To run it locally:
+`.github/workflows/ci.yml` builds, runs both test projects on Linux and Windows, and packs, on every push to main and pull request. `.github/workflows/pages.yml` runs the library's tests, publishes the page and deploys it to GitHub Pages. It needs Pages set to "GitHub Actions" in the repository settings. To run it locally:
 
 ```bash
 dotnet run --project samples/CompanyDueDiligence.Web --urls http://localhost:5180
@@ -668,7 +604,7 @@ dotnet run --project samples/CompanyDueDiligence.Server
 
 Then open http://localhost:5190. On a computer shared with other accounts, which can all reach localhost, start it with `--token`: every API call but `api/mode` then needs the access token, and the address to open is the one it prints, http://localhost:5190/?token=…. The page keeps the token in the browser and takes it out of the address bar. The token is in `token` in the data folder and stays the same across runs. The page asks `api/mode` at start: the server answers it, GitHub Pages answers 404, and the page then stays the browser demo above.
 
-- Cases, name searches and person searches run on the server, over every keyless source, each keyed source whose settings are given, and each bulk source whose index is built. The picker, the switches, the chips, grouping, flags and deep links work as in the browser.
+- Cases, name searches and person searches run on the server, over every keyless source, each keyed source whose settings are given, and each bulk source whose index is built. The pickers, the switches, grouping, flags and deep links work as in the browser.
 - Settings → Keys has a field per setting in `KeyedSources.settingNames`, with Save and Remove, and shows whether each is set, never its value. "Get a key" opens each issuer's page, with what getting the key takes. A register is listed once all its settings are given. An environment variable of the same name also counts; a saved key overrides it. Companies House takes a key of type API Key here.
 - Settings → Bulk sources has Download for each source with fixed links or a resolver, with a progress bar, then Remove and the index size. A download builds the index; then that source's lookups and name search answer like any register's.
 - A resolved source shows the listing it is found through. "Show the current files" reads the listing and lists the files with their names on the portal, dates and sizes, without downloading. After a download, the saved files are listed the same way. When the listing can't be read, the error says how to get the files by hand.

@@ -26,8 +26,7 @@ module internal Connecticut =
             Owners = Support.NotOffered "The registry's datasets list no owners"
             Cost = AccessCost.Free
             RateLimit = RateLimitPolicy.NotPublished(2, TimeSpan.FromSeconds 1.)
-            Licence =
-                "Public Domain, per the Business Master's metadata; the Principals dataset states none. Read without a key; a Socrata app token (X-App-Token) would raise the portal's limits"
+            Licence = "Public Domain (Business Master); Principals states none"
         }
 
     [<Literal>]
@@ -136,7 +135,7 @@ module internal Connecticut =
             OpenData.text "mailing_address" e
             |> ValueOption.map (fun line ->
                 let parts =
-                    line.Split(',')
+                    line.Split ','
                     |> Array.map _.Trim()
                     |> Array.filter (fun part -> part <> "")
                     |> String.concat ", "

@@ -129,7 +129,7 @@ module BulkCatalogue =
                 "https://www.asp.gov.md/ro/date-deschise/date-statistice/company"
                 (BulkDelivery.ByHand "Download company.xlsx from the page; its path holds the year")
                 (days 31.)
-                "None stated"
+                "None stated; the site terms allow reuse under the law, source named"
             entry
                 "RS"
                 "RS"
@@ -140,7 +140,7 @@ module BulkCatalogue =
                         link "companies.json" "https://openapi.apr.gov.rs/api/opendata/companies" 57_700_000L
                     ])
                 (days 31.)
-                "Serbian Open Data Licence"
+                "Serbian Open Data Licence, per data.gov.rs"
             entry
                 "BA-BRC"
                 "BA-BRC"
@@ -170,7 +170,7 @@ module BulkCatalogue =
                 "https://dos.fl.gov/sunbiz/other-services/data-downloads/"
                 (BulkDelivery.ByHand "Fetch cordata.zip and the daily files over SFTP with the public login on the page")
                 (days 90.)
-                "None stated"
+                "None stated; free downloads for informational purposes"
             entry
                 "US-AK"
                 "US-AK"
@@ -188,7 +188,7 @@ module BulkCatalogue =
                             40_000_000L
                     ])
                 (days 7.)
-                "None stated"
+                "None found; the download page is behind a captcha"
             entry
                 "PY"
                 "PY"
@@ -196,7 +196,7 @@ module BulkCatalogue =
                 "https://www.dnit.gov.py/web/portal-institucional/listado-de-ruc-con-sus-equivalencias"
                 (BulkDelivery.Links paraguayFiles)
                 (days 31.)
-                "None stated"
+                "None stated; the site says all rights reserved"
             entry
                 "BR"
                 "BR"
@@ -204,7 +204,7 @@ module BulkCatalogue =
                 "https://arquivos.receitafederal.gov.br/"
                 (BulkDelivery.Resolved BulkResolvers.brazil)
                 (days 31.)
-                "Unverified"
+                "Unverified: dados.gov.br couldn't be read"
             entry
                 "AU-ASIC"
                 "AU"
@@ -226,19 +226,10 @@ module BulkCatalogue =
                 "CL"
                 "Chile: SII nómina de personas jurídicas"
                 "https://www.sii.cl/estadisticas/nominas/"
-                (BulkDelivery.Links
-                    [
-                        link
-                            "PUB_NOMBRES_PJ.zip"
-                            "https://www.sii.cl/estadisticas/nominas/PUB_NOMBRES_PJ.zip"
-                            52_385_281L
-                        link
-                            "PUB_NOM_DIRECCIONES.zip"
-                            "https://www.sii.cl/estadisticas/nominas/PUB_NOM_DIRECCIONES.zip"
-                            95_040_204L
-                    ])
+                (BulkDelivery.ByHand
+                    "SII's site terms allow personal non-commercial use only and need SII's express approval to reproduce the nómina; with that approval, download PUB_NOMBRES_PJ.zip and PUB_NOM_DIRECCIONES.zip from https://www.sii.cl/estadisticas/nominas/ and pass them to BulkSources.chileSiiAsync")
                 (days 90.)
-                "None stated; SII disclaims accuracy"
+                "None stated; site terms: personal non-commercial use, reproduction needs SII's approval"
             entry
                 "AR-C"
                 "AR-C"
@@ -271,7 +262,7 @@ module BulkCatalogue =
                             37_415_556L
                     ])
                 (days 1.)
-                "None stated"
+                "None stated; on datosabiertos.gob.ec with no licence"
         ]
 
     let tryFind (id: string) =
@@ -317,8 +308,7 @@ type BulkDownloads
 
     static let indexName = "index"
 
-    static let userAgent =
-        "CompanyDueDiligence/0.3 (+https://github.com/Thorium/CompanyDueDiligence)"
+    static let userAgent = UserAgent.value
 
     /// Names this library, and accepts any type: some portals' firewalls refuse a request that states no Accept.
     static let identify (client: HttpClient) =
@@ -655,12 +645,6 @@ type BulkDownloads
                             date
                             ct
                     | "PY" -> BulkSources.paraguayAsync [ for digit in 0..9 -> openFile $"ruc{digit}.zip" ] date ct
-                    | "CL-SII" ->
-                        BulkSources.chileSiiAsync
-                            (openFile "PUB_NOMBRES_PJ.zip")
-                            (openFile "PUB_NOM_DIRECCIONES.zip")
-                            date
-                            ct
                     | "PE" -> BulkSources.peruAsync (openFile "padron_reducido_ruc.zip") date ct
                     | "EC" -> BulkSources.ecuadorAsync (openFile "directorio_companias.xlsx") date ct
                     | "CY" ->
@@ -788,7 +772,7 @@ type BulkDownloads
         | _ -> ValueNone
 
     /// A cache over a caller-owned handler, giving up on a download that receives nothing for two minutes.
-    new(cacheDirectory: string, handler: HttpMessageHandler, now: unit -> DateTimeOffset) =
+    internal new(cacheDirectory: string, handler: HttpMessageHandler, now: unit -> DateTimeOffset) =
         new BulkDownloads(cacheDirectory, handler, now, TimeSpan.FromMinutes 2.)
 
     /// A cache over its own handler, which follows up to five redirects, as published links often move to a signed address, and gives up
@@ -954,37 +938,43 @@ type BulkDownloads
     /// is built and no index is kept. An opened index holds its files open until it is disposed.
     member _.LoadAsync
         (entry: BulkCatalogueEntry, ct: CancellationToken)
-        : Task<Result<ICompanyRegistry, RegistryFailure>> =
+        : Task<Result<IBulkRegistry, RegistryFailure>> =
         task {
-            match entry.Delivery, saved entry with
-            | BulkDelivery.ByHand _, _ ->
-                return
-                    Error(
-                        RegistryFailure.InvalidRequest
-                            $"{entry.Title} is fetched by hand: pass its files to BulkSources"
-                    )
-            | _, ValueNone -> return Error(RegistryFailure.InvalidRequest $"{entry.Title} isn't downloaded")
-            | _, ValueSome(date, links) ->
-                if OperatingSystem.IsBrowser() then
-                    return! build entry date links ct
-                else
-                    let directory = indexOf entry
+            let! loaded =
+                task {
+                    match entry.Delivery, saved entry with
+                    | BulkDelivery.ByHand _, _ ->
+                        return
+                            Error(
+                                RegistryFailure.InvalidRequest
+                                    $"{entry.Title} is fetched by hand: pass its files to BulkSources"
+                            )
+                    | _, ValueNone -> return Error(RegistryFailure.InvalidRequest $"{entry.Title} isn't downloaded")
+                    | _, ValueSome(date, links) ->
+                        if OperatingSystem.IsBrowser() then
+                            return! build entry date links ct
+                        else
+                            let directory = indexOf entry
 
-                    let! opened =
-                        match freshIndex entry date links with
-                        | ValueSome _ -> BulkIndexes.openAsync directory ct
-                        | ValueNone -> Task.FromResult(Error(RegistryFailure.RequestRefused "No index of these files"))
+                            let! opened =
+                                match freshIndex entry date links with
+                                | ValueSome _ -> BulkIndexes.openAsync directory ct
+                                | ValueNone ->
+                                    Task.FromResult(Error(RegistryFailure.RequestRefused "No index of these files"))
 
-                    match opened with
-                    | Ok registry -> return Ok registry
-                    | Error _ ->
-                        match! index entry date links ct with
-                        | Error failure -> return Error failure
-                        | Ok(ValueSome built) -> return Ok built
-                        | Ok ValueNone ->
-                            match! BulkIndexes.openAsync directory ct with
-                            | Ok registry -> return Ok registry
-                            | Error _ -> return! build entry date links ct
+                            match opened with
+                            | Ok registry -> return Ok(registry :> ICompanyRegistry)
+                            | Error _ ->
+                                match! index entry date links ct with
+                                | Error failure -> return Error failure
+                                | Ok(ValueSome built) -> return Ok built
+                                | Ok ValueNone ->
+                                    match! BulkIndexes.openAsync directory ct with
+                                    | Ok registry -> return Ok(registry :> ICompanyRegistry)
+                                    | Error _ -> return! build entry date links ct
+                }
+            // Every bulk register, built or opened from an index, is an IBulkRegistry.
+            return loaded |> Result.map (fun registry -> registry :?> IBulkRegistry)
         }
 
     /// Deletes the entry's saved files and its index.
