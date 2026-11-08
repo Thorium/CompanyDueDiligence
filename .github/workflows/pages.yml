@@ -3,7 +3,7 @@ name: Pages
 # Publishes the browser demo in samples/CompanyDueDiligence.Web to GitHub Pages. Pages must be set to "GitHub Actions" in the repository's settings.
 on:
   push:
-    branches: [master]
+    branches: [main]
     paths: ['src/**', 'samples/**', '.github/workflows/pages.yml']
   workflow_dispatch:
 
