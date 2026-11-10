@@ -103,7 +103,9 @@ module internal ArgentinaIgj =
         use stream = BulkFile.openEntry entry
 
         match
-            BulkFile.splitAt (fun _ -> true) (BulkFile.records ',' true (BulkFile.lines BulkFile.strictUtf8 stream))
+            BulkFile.splitAt
+                (fun _ -> true)
+                (BulkFile.records ',' true (BulkFile.wholeLines ',' true BulkFile.strictUtf8 stream))
         with
         | struct (_, ValueNone, _) -> read (fun _ _ -> ValueNone) Seq.empty
         | struct (_, ValueSome first, rows) ->

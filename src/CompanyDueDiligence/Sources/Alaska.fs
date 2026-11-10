@@ -97,7 +97,9 @@ module internal Alaska =
     let private table (ct: CancellationToken) (required: string list) (file: Stream) =
         let read =
             BulkFile.perFile file (fun _ openFile ->
-                match BulkFile.splitAt (fun _ -> true) (BulkFile.lines BulkFile.strictUtf8 (openFile ())) with
+                match
+                    BulkFile.splitAt (fun _ -> true) (BulkFile.wholeLines ',' true BulkFile.strictUtf8 (openFile ()))
+                with
                 | struct (_, ValueNone, _) -> BulkFile.fail "The file is empty"
                 | struct (_, ValueSome headerLine, lines) ->
                     let header = BulkFile.header (BulkFile.split ',' true headerLine)

@@ -102,6 +102,14 @@ module internal Switzerland =
             )
         )
 
+    /// True when every character of the text is one XML 1.0 can carry: no control character but tab and line ends, and no half surrogate pair.
+    let isXmlText (text: string) =
+        try
+            XmlConvert.VerifyXmlChars text |> ignore
+            true
+        with :? XmlException ->
+            false
+
     let searchEnvelope (name: string) =
         envelope (
             XElement(
@@ -178,17 +186,25 @@ module internal Switzerland =
         | Some _ -> RegistryFailure.Unavailable "SOAP fault"
         | None -> RegistryFailure.Unavailable "HTTP 500"
 
+    /// The wording a name in liquidation carries, as words of their own in any case: "in Liquidation", "in Nachlassliquidation",
+    /// "en liquidation" (so "en liquidation concordataire" too), "in liquidazione" (so "in liquidazione concordataria" too),
+    /// "en liquidaziun", and the short forms "in Liq." and "en liq.". A name that only holds the word, such as "Liquidation Services AG",
+    /// doesn't carry it.
+    let private liquidationWording =
+        Regex(
+            @"(?<![\p{L}\p{N}])(?:in\s+(?:Nachlass)?Liquidation|in\s+liquidazione|en\s+liquidation|en\s+liquidaziun|(?:in|en)\s+liq\.)(?![\p{L}\p{N}])",
+            RegexOptions.IgnoreCase ||| RegexOptions.CultureInvariant
+        )
+
     /// The eCH-0108 UID status decides a deleted or annulled entry. An active one (definitive, or being amended) takes the commercial register
-    /// entry's status where it has one; a name ending in liquidation wording is being wound up.
+    /// entry's status where it has one; a name carrying liquidation wording is being wound up.
     let standing
         (uidStatus: string voption)
         (registerStatus: string voption)
         (entryStatus: string voption)
         (name: string)
         =
-        let inLiquidation =
-            [ "in Liquidation"; "en liquidation"; "in liquidazione"; "en liquidaziun" ]
-            |> List.exists (fun words -> name.Contains(words, StringComparison.OrdinalIgnoreCase))
+        let inLiquidation = not (isNull name) && liquidationWording.IsMatch name
 
         match uidStatus, registerStatus, entryStatus with
         | ValueSome "5", _, _ -> CompanyStanding.Closed "Gelöscht (deleted from the UID register)"
@@ -509,6 +525,13 @@ type internal SwitzerlandRegistry(connection: SourceConnection) =
             SourceAnswer.inCoverage coverage jurisdiction (fun () ->
                 if String.IsNullOrWhiteSpace name then
                     Task.FromResult(Error(RegistryFailure.InvalidRequest "A search needs a term"))
+                elif not (Switzerland.isXmlText name) then
+                    Task.FromResult(
+                        Error(
+                            RegistryFailure.InvalidRequest
+                                "A search term can't hold a control character or half a surrogate pair, which XML can't carry"
+                        )
+                    )
                 else
                     task {
                         match! call "Search" (Switzerland.searchEnvelope name) Switzerland.search ct with

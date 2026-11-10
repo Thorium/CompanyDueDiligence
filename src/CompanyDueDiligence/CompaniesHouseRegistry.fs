@@ -137,14 +137,37 @@ module internal Neutral =
         | ValueSome other -> OfficerRole.Other other
         | ValueNone -> OfficerRole.Other ""
 
+    /// The roles of the specification's officer_role list that have a corporate- form beside them, so that without it they are a person's.
+    let private personRoles =
+        set
+            [
+                "director"
+                "llp-designated-member"
+                "llp-member"
+                "manager-of-an-eeig"
+                "managing-officer"
+                "member-of-a-management-organ"
+                "member-of-a-supervisory-organ"
+                "member-of-an-administrative-organ"
+                "nominee-director"
+                "nominee-secretary"
+                "secretary"
+            ]
+
+    /// A corporate- role or an identification block is a legal entity. A date of birth, or a role with a corporate- form beside it, is a
+    /// person. Any other role, such as a partner in a limited partnership, is held by either, and doesn't say which.
+    let officerKind (officer: CompanyOfficer) =
+        match officer.Role with
+        | ValueSome role when role.StartsWith("corporate-", StringComparison.Ordinal) -> PartyKind.LegalEntity
+        | _ when officer.Identification.IsSome -> PartyKind.LegalEntity
+        | _ when officer.DateOfBirth.IsSome -> PartyKind.Individual
+        | ValueSome role when personRoles.Contains role -> PartyKind.Individual
+        | role -> PartyKind.Unknown role
+
     let officer (officer: CompanyOfficer) : Officer =
         {
             Name = officer.Name
-            Kind =
-                match officer.Role with
-                | ValueSome role when role.StartsWith "corporate-" -> PartyKind.LegalEntity
-                | ValueSome _ -> PartyKind.Individual
-                | ValueNone -> PartyKind.Unknown ValueNone
+            Kind = officerKind officer
             Role = officerRole officer.Role
             Current = officer.ResignedOn.IsNone
             AppointedOn = officer.AppointedOn
@@ -326,6 +349,86 @@ module internal Neutral =
             | [], _ -> NotAvailable "Only former persons with significant control are held, and no statement"
             | _ -> NotAvailable("The company's statements don't name its owners: " + String.concat ", " codes)
 
+    /// What a profile says keeps the company's lists from being whole.
+    [<Struct>]
+    type ProfileMarkers =
+        {
+            /// partial_data_available.
+            PartialData: string voption
+            /// super_secure_managing_officer_count, zero when absent.
+            SuperSecureOfficers: int
+        }
+
+    let markers (profile: CompanyProfile) =
+        {
+            PartialData = profile.PartialData
+            SuperSecureOfficers = profile.SuperSecureManagingOfficers |> ValueOption.defaultValue 0 |> max 0
+        }
+
+    let private partialData (marker: string) =
+        $"The profile states partial_data_available ({marker}): Companies House isn't the primary source of this company's data"
+
+    /// An officer the lists don't show, as a placeholder that says why.
+    let private unlisted (name: string) (kind: PartyKind) (role: string) : Officer =
+        {
+            Name = name
+            Kind = kind
+            Role = OfficerRole.Other role
+            Current = true
+            AppointedOn = ValueNone
+            EndedOn = ValueNone
+            BornIn = ValueNone
+            Nationality = ValueNone
+            CountryOfResidence = ValueNone
+            Address = ValueNone
+            Entity = ValueNone
+            IdentityVerification = ValueNone
+        }
+
+    /// The officer list as the profile's markers leave it: one withheld officer for each super secure managing officer the profile counts,
+    /// and, where Companies House isn't the primary source, an empty list as not available and any other with one officer not given.
+    let officersWith (found: ProfileMarkers) (listed: Officer list) : Availability<Officer list> =
+        let superSecure =
+            List.replicate
+                found.SuperSecureOfficers
+                (unlisted
+                    PartyNames.NotPublished
+                    PartyKind.Withheld
+                    "managing officer, super secure (super_secure_managing_officer_count)")
+
+        match found.PartialData, listed @ superSecure with
+        | ValueSome marker, [] ->
+            NotAvailable(partialData marker + ", so an empty officer list doesn't say it has none")
+        | ValueSome marker, officers ->
+            Available(
+                officers
+                @ [
+                    unlisted
+                        PartyNames.NotGiven
+                        (PartyKind.Unknown ValueNone)
+                        $"any officer only the primary source holds (partial_data_available: {marker})"
+                ]
+            )
+        | ValueNone, officers -> Available officers
+
+    /// The owner listing with a gap where Companies House isn't the primary source.
+    let ownersWith (found: ProfileMarkers) (listing: OwnerListing) : OwnerListing =
+        match found.PartialData with
+        | ValueSome marker ->
+            { listing with
+                Gaps =
+                    listing.Gaps
+                    @ [
+                        OwnershipGap.StatementNotUnderstood
+                            $"partial_data_available: {marker} (Companies House isn't the primary source)"
+                    ]
+            }
+        | ValueNone -> listing
+
+    /// Whether a filing history's own filing_history_status leaves it whole: absent, or available. Any other status says the list is limited.
+    let filingsStatedWhole (status: string voption) =
+        status.IsNone || status = ValueSome Api.FilingHistory.Available
+
     /// A filing in neutral terms. A capital figure that isn't a number is left out of Capital and stays in the raw item.
     let filing (item: FilingHistoryItem) : FiledDocument =
         {
@@ -453,8 +556,10 @@ type CompaniesHouseRegistry internal (client: CompaniesHouseClient, now: unit ->
         else
             Threading.Tasks.Task.FromResult(Error(RegistryFailure.OutsideCoverage jurisdiction))
 
-    /// Numbers whose profile this registry has read, so that unlessUnknown needn't ask again. Emptied past heldMost.
-    let held = Collections.Concurrent.ConcurrentDictionary<string, byte>()
+    /// Numbers whose profile this registry has read, each with what the profile says keeps its lists from being whole, so that withProfile
+    /// needn't ask again. Emptied past heldMost.
+    let held =
+        Collections.Concurrent.ConcurrentDictionary<string, Neutral.ProfileMarkers>()
 
     let normal (number: string) =
         if isNull number then
@@ -462,35 +567,51 @@ type CompaniesHouseRegistry internal (client: CompaniesHouseClient, now: unit ->
         else
             number.Trim().ToUpperInvariant()
 
-    let remember (number: string) =
+    let remember (profile: CompanyProfile) =
         if held.Count >= heldMost then
             held.Clear()
 
-        held[number] <- 0uy
+        held[profile.CompanyNumber] <- Neutral.markers profile
 
-    /// An empty list, checked against the profile unless this registry has read it: Companies House answers an officer list or filing history
-    /// for a number it doesn't hold with an empty list, as it did on 2026-11-08. A failed check fails the answer.
-    let unlessUnknown
+    /// An Available list as the company's profile leaves it, which apply gives from the profile's markers. The profile is read unless this
+    /// registry has read it. Companies House answers an officer list or filing history for a number it doesn't hold with an empty list, as
+    /// it did on 2026-11-08, so an empty list for a number with no profile is not available. A failed read of the profile fails the answer.
+    let withProfile
         (number: string)
         (isEmpty: 'T -> bool)
+        (apply: Neutral.ProfileMarkers -> 'T -> Availability<'T>)
         (ct: CancellationToken)
         (answer: Result<Evidence<Availability<'T>>, RegistryFailure>)
         =
+        let applied (evidence: Evidence<Availability<'T>>) (found: Neutral.ProfileMarkers) (value: 'T) =
+            match apply found value with
+            | Available _ as whole -> Ok { evidence with Value = whole }
+            | other ->
+                Ok
+                    { evidence with
+                        Raw = ValueNone
+                        Value = other
+                    }
+
         task {
             match answer with
-            | Ok({ Value = Available value } as evidence) when isEmpty value && not (held.ContainsKey(normal number)) ->
-                match! Api.Companies.getAsync client number ct with
-                | Ok(ValueSome read) ->
-                    remember read.CompanyNumber
-                    return answer
-                | Ok ValueNone ->
-                    return
-                        Ok
-                            { evidence with
-                                Raw = ValueNone
-                                Value = NotAvailable "Companies House holds no company with this number"
-                            }
-                | Error failure -> return Error(Neutral.failure (now ()) failure)
+            | Ok({ Value = Available value } as evidence) ->
+                match held.TryGetValue(normal number) with
+                | true, found -> return applied evidence found value
+                | _ ->
+                    match! Api.Companies.getAsync client number ct with
+                    | Ok(ValueSome read) ->
+                        remember read
+                        return applied evidence (Neutral.markers read) value
+                    | Ok ValueNone when isEmpty value ->
+                        return
+                            Ok
+                                { evidence with
+                                    Raw = ValueNone
+                                    Value = NotAvailable "Companies House holds no company with this number"
+                                }
+                    | Ok ValueNone -> return answer
+                    | Error failure -> return Error(Neutral.failure (now ()) failure)
             | _ -> return answer
         }
 
@@ -597,7 +718,7 @@ type CompaniesHouseRegistry internal (client: CompaniesHouseClient, now: unit ->
                                         }
                                 )
                             | ValueSome read ->
-                                remember read.CompanyNumber
+                                remember read
                                 Ok answer
                             | ValueNone -> Ok answer)
                         |> Result.map (fun answer ->
@@ -648,7 +769,7 @@ type CompaniesHouseRegistry internal (client: CompaniesHouseClient, now: unit ->
                                     (Available(officers |> List.map Neutral.officer))
                             | ValueNone -> answered ValueNone (NotAvailable "No officer list is held for this number"))
                         |> Result.mapError (Neutral.failure (now ()))
-                        |> unlessUnknown number List.isEmpty ct
+                        |> withProfile number List.isEmpty Neutral.officersWith ct
                 })
 
         member _.OwnersAsync(number: string, jurisdiction: Jurisdiction, _: OwnerPurpose, ct: CancellationToken) =
@@ -659,7 +780,7 @@ type CompaniesHouseRegistry internal (client: CompaniesHouseClient, now: unit ->
                     | Ok pscs ->
                         let! statements = Api.PscStatements.allAsync client number ct
 
-                        return
+                        return!
                             statements
                             |> Result.map (fun statements ->
                                 let listedPscs = pscs |> ValueOption.defaultValue []
@@ -669,6 +790,11 @@ type CompaniesHouseRegistry internal (client: CompaniesHouseClient, now: unit ->
                                     (rawList ((listedPscs |> List.map _.Raw) @ (listedStatements |> List.map _.Raw)))
                                     (Neutral.owners listedPscs listedStatements))
                             |> Result.mapError (Neutral.failure (now ()))
+                            |> withProfile
+                                number
+                                (fun _ -> false)
+                                (fun found listing -> Available(Neutral.ownersWith found listing))
+                                ct
                 })
 
     interface IFilingRegister with
@@ -682,18 +808,26 @@ type CompaniesHouseRegistry internal (client: CompaniesHouseClient, now: unit ->
                     filings
                     |> Result.map (fun answer ->
                         match answer with
-                        | ValueSome(items, total, complete) ->
+                        | ValueSome(items, total, complete, status) ->
                             answered
                                 (rawList (items |> List.map _.Raw))
                                 (Available
                                     {
                                         Filings = items |> List.map Neutral.filing
                                         Total = ValueSome total
-                                        Complete = complete
+                                        Complete = complete && Neutral.filingsStatedWhole status
                                     })
                         | ValueNone -> answered ValueNone (NotAvailable "No filing history is held for this number"))
                     |> Result.mapError (Neutral.failure (now ()))
-                    |> unlessUnknown number (fun history -> history.Filings.IsEmpty) ct
+                    |> withProfile
+                        number
+                        (fun history -> history.Filings.IsEmpty)
+                        (fun found history ->
+                            Available
+                                { history with
+                                    Complete = history.Complete && found.PartialData.IsNone
+                                })
+                        ct
             }
 
         member _.InsolvencyAsync(number: string, ct: CancellationToken) =

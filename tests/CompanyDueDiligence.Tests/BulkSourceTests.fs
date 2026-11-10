@@ -624,13 +624,34 @@ let ``a Romanian number that can't be one isn't looked up`` (number: string) : T
     }
 
 [<Fact>]
-let ``a number missing from Romania's file is not held`` () : Task =
+let ``a CUI missing from Romania's file is not held`` () : Task =
     task {
         let! registry = romania ()
-        let! byCode = find registry "J40/99999/2020" ro
-        Assert.Equal(Available ValueNone, byCode.Value)
         let! byCui = find registry "99999999" ro
         Assert.Equal(Available ValueNone, byCui.Value)
+    }
+
+// The file holds J2019003266407 and J40/1116/1991, each in one form only.
+[<Theory>]
+[<InlineData("J40/99999/2020")>]
+[<InlineData("J40/3266/2019")>]
+[<InlineData("J1991001116400")>]
+let ``a Romanian registration number the file doesn't hold in that form can't be told absent`` (number: string) : Task =
+    task {
+        let! registry = romania ()
+        let! found = find registry number ro
+
+        match found.Value with
+        | NotAvailable reason -> Assert.Contains("two forms", reason)
+        | other -> failwith $"%A{other}"
+
+        match! registry.OfficersAsync(number, ro, ct) with
+        | Ok { Value = NotAvailable reason } -> Assert.Contains("two forms", reason)
+        | other -> failwith $"%A{other}"
+
+        match! registry.OwnersAsync(number, ro, OwnerPurpose.CustomerDueDiligence, ct) with
+        | Ok { Value = NotAvailable reason } -> Assert.Contains("two forms", reason)
+        | other -> failwith $"%A{other}"
     }
 
 [<Fact>]
@@ -1155,3 +1176,108 @@ let ``a Romanian search over a file with repeated numbers says it isn't complete
             Assert.False result.Complete
         | other -> failwith $"%A{other}"
     }
+
+// Files cut short
+
+/// The text up to the end of its last record's first field, with no line end after it.
+let private cutInLastRecord (delimiter: char) (text: string) =
+    let whole = text.TrimEnd('\r', '\n')
+    let lastRecord = whole.LastIndexOf '\n' + 1
+    whole.Substring(0, whole.IndexOf(delimiter, lastRecord))
+
+let private expectCutShort (build: Task<Result<ICompanyRegistry, RegistryFailure>>) =
+    task {
+        match! build with
+        | Error(RegistryFailure.UnreadableAnswer reason) -> Assert.Contains("cut short", reason)
+        | other -> failwith $"%A{other}"
+    }
+
+[<Fact>]
+let ``a Romanian file cut short in its last record is refused, whichever file it is`` () : Task =
+    task {
+        let build (firms: Stream) (states: Stream) (representatives: Stream) =
+            BulkSources.romaniaAsync
+                firms
+                states
+                (ValueSome(fixture "romania-state-names.csv"))
+                (ValueSome representatives)
+                date
+                ct
+
+        let cut name =
+            textStream (cutInLastRecord '^' (fixtureText name))
+
+        do!
+            expectCutShort (
+                build (cut "romania-firms.csv") (fixture "romania-states.csv") (fixture "romania-representatives.csv")
+            )
+
+        do!
+            expectCutShort (
+                build (fixture "romania-firms.csv") (cut "romania-states.csv") (fixture "romania-representatives.csv")
+            )
+
+        do!
+            expectCutShort (
+                build (fixture "romania-firms.csv") (fixture "romania-states.csv") (cut "romania-representatives.csv")
+            )
+    }
+
+[<Fact>]
+let ``a Cyprus organisations file cut short in its last record is refused`` () : Task =
+    expectCutShort (
+        BulkSources.cyprusAsync
+            (textStream (cutInLastRecord ',' (fixtureText "cyprus-organisations.csv")))
+            (ValueSome(fixture "cyprus-registered-office.csv"))
+            (ValueSome(fixture "cyprus-officials.csv"))
+            date
+            ct
+    )
+
+[<Fact>]
+let ``a short last record before a line end, or a whole one without, is read as the file gives it`` () : Task =
+    task {
+        let firm = "FIRST SRL^555^J40/1/2001^01/01/2001^^SRL^România^^^^^^^^^^^^^"
+
+        // A whole last record with no line end after it.
+        let! unended = romaniaRows [ firm ] "COD_INMATRICULARE^COD\nJ40/1/2001^1048"
+        let! found = find unended "J40/1/2001" ro
+        Assert.Equal("FIRST SRL", (companyOf found).Name)
+
+        // A short last record with its line end: a ragged row, whose missing columns are absent.
+        let! ragged =
+            romaniaRows [ firm; "SECOND SRL^556^J40/2/2002\n" ] "COD_INMATRICULARE^COD\nJ40/1/2001^1048\n"
+
+        let! short = find ragged "J40/2/2002" ro
+        Assert.Equal("SECOND SRL", (companyOf short).Name)
+    }
+
+[<Theory>]
+[<InlineData("a,b,c\n1,2,3\n4,5", true)>]
+[<InlineData("a,b,c\n1,2,3\n4,5\n", false)>]
+[<InlineData("a,b,c\n1,2,3\n4,5\r\n", false)>]
+[<InlineData("a,b,c\n1,2,3\n4,5,6", false)>]
+[<InlineData("a,b,c\n1,2\n4,5,6", false)>]
+[<InlineData("a,b,c\n1,2,3\n\"4,5\",6", true)>]
+[<InlineData("a,b,c\n1,2,3\n\"4\n5\",6,7", false)>]
+[<InlineData("a,b,c\n1,2,3\n\"4\n5\",6", true)>]
+[<InlineData("a,b,c\n1,2,3\n  ", false)>]
+[<InlineData("a,b,c", false)>]
+[<InlineData("", false)>]
+let ``a delimited text is cut short only when its last record is short and has no line end`` (text: string, cut: bool) =
+    let read () =
+        BulkFile.wholeLines ',' true BulkFile.strictUtf8 (textStream text)
+        |> BulkFile.records ',' true
+        |> List.ofSeq
+
+    if cut then
+        match
+            (try
+                Ok(read ())
+             with BulkFile.UnreadableFile reason ->
+                 Error reason)
+        with
+        | Error reason -> Assert.Contains("cut short", reason)
+        | Ok records -> failwith $"%A{records}"
+    else
+        read () |> ignore

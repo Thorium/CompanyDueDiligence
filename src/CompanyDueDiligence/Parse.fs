@@ -76,6 +76,7 @@ let page (item: JsonElement -> 'T) (e: JsonElement) : Page<'T> =
             Total = total
             Counts = ValueNone
             ItemsRaw = elements |> List.map _.GetRawText()
+            Status = tryString "filing_history_status" e
         }
     | ValueNone when total = 0 ->
         {
@@ -83,6 +84,7 @@ let page (item: JsonElement -> 'T) (e: JsonElement) : Page<'T> =
             Total = total
             Counts = ValueNone
             ItemsRaw = []
+            Status = tryString "filing_history_status" e
         }
     | _ -> raise (InvalidJson "The answer has no items list")
 
@@ -175,6 +177,8 @@ let companyProfile (e: JsonElement) : CompanyProfile =
                     ParentName = tryString "parent_company_name" block
                 })
         ExternalRegistrationNumber = tryText "external_registration_number" e
+        PartialData = tryString "partial_data_available" e
+        SuperSecureManagingOfficers = tryInt "super_secure_managing_officer_count" e
         Raw = e.GetRawText()
     }
 

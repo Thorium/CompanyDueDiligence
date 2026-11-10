@@ -74,6 +74,58 @@ type internal BoundedStream(inner: Stream, limit: int64) =
 
         base.Dispose disposing
 
+/// A read-only view of a stream that keeps the last two bytes read from it, for telling how a text ended. Disposing it leaves the stream open.
+[<Sealed>]
+type internal EndingStream(inner: Stream) =
+    inherit Stream()
+
+    let mutable last = 0uy
+    let mutable before = 0uy
+    let mutable any = false
+
+    let seen (buffer: ReadOnlySpan<byte>) =
+        if buffer.Length >= 2 then
+            before <- buffer[buffer.Length - 2]
+            last <- buffer[buffer.Length - 1]
+            any <- true
+        elif buffer.Length = 1 then
+            before <- last
+            last <- buffer[0]
+            any <- true
+
+    /// True once bytes have been read and the last isn't a line end, in UTF-8, Latin-1 or UTF-16.
+    member _.EndsWithoutLineEnd =
+        let isLineEnd (value: byte) = value = 10uy || value = 13uy
+        any && not (isLineEnd last || (last = 0uy && isLineEnd before))
+
+    override _.CanRead = true
+    override _.CanSeek = false
+    override _.CanWrite = false
+    override _.Length = raise (NotSupportedException())
+
+    override _.Position
+        with get () = raise (NotSupportedException())
+        and set _ = raise (NotSupportedException())
+
+    override _.Flush() = ()
+    override _.Seek(_, _) = raise (NotSupportedException())
+    override _.SetLength _ = raise (NotSupportedException())
+    override _.Write(_, _, _) = raise (NotSupportedException())
+
+    override _.Read(buffer: byte array, offset: int, count: int) =
+        let read = inner.Read(buffer, offset, count)
+        seen (ReadOnlySpan(buffer, offset, read))
+        read
+
+    override _.Read(buffer: Span<byte>) =
+        let read = inner.Read buffer
+        seen (Span.op_Implicit (buffer.Slice(0, read)))
+        read
+
+/// One line of a text, and whether the text ends at it without a line end.
+[<Struct>]
+type internal TextLine = { Text: string; Unended: bool }
+
 /// One record of a delimited file: its own text, kept as evidence, and its fields.
 [<Struct>]
 type internal DelimitedRecord = { Raw: string; Fields: string array }
@@ -352,6 +404,76 @@ module internal BulkFile =
                         Fields = split delimiter quoting raw
                     })
 
+    /// The lines of a text stream, as lines reads them, the last one saying whether the text ended there without a line end. The stream is
+    /// left open.
+    let linesToEnd (encoding: Encoding) (stream: Stream) : TextLine seq =
+        seq {
+            use ending = new EndingStream(stream)
+            use reader = new StreamReader(ending, encoding, true, 65536, true)
+
+            // Each line with the one after it, so the last is known as it is given, when the stream has been read to its end.
+            yield!
+                Seq.initInfinite (fun _ -> reader.ReadLine())
+                |> Seq.takeWhile (isNull >> not)
+                |> Seq.map ValueSome
+                |> fun read -> Seq.append read (Seq.singleton ValueNone)
+                |> Seq.pairwise
+                |> Seq.choose (fun (line, next) ->
+                    match line, next with
+                    | ValueSome text, ValueSome _ -> Some { Text = text; Unended = false }
+                    | ValueSome text, ValueNone ->
+                        Some
+                            {
+                                Text = text
+                                Unended = ending.EndsWithoutLineEnd
+                            }
+                    | ValueNone, _ -> None)
+        }
+
+    /// The lines' text, failing the file when it ends without a line end in a record with fewer fields than columns, or than its first
+    /// record when columns is ValueNone. Such a file is cut short, and the fields its last record lacks would read as absent. A record with
+    /// fewer fields anywhere else, or before a line end, is read as the file gives it.
+    let whole (columns: int voption) (delimiter: char) (quoting: bool) (lines: TextLine seq) : string seq =
+        // The field count to expect, and the lines so far of a record whose quoted field is still open, last first.
+        lines
+        |> Seq.scan
+            (fun (struct (expected: int voption, opened: string list, _)) line ->
+                let record = line.Text :: opened
+
+                let stillOpen = quoting && openAfter delimiter (not opened.IsEmpty) line.Text
+
+                let fields () =
+                    (split delimiter quoting (String.Join("\n", List.rev record))).Length
+
+                let blank = opened.IsEmpty && String.IsNullOrWhiteSpace line.Text
+
+                let expected =
+                    match expected with
+                    | ValueNone when not stillOpen && not blank -> ValueSome(fields ())
+                    | known -> known
+
+                match expected with
+                | ValueSome needed when line.Unended && not stillOpen && not blank && fields () < needed ->
+                    fail
+                        "The file ends without a line end, in a record with fewer fields than the others: it is cut short"
+                | _ -> ()
+
+                struct (expected, (if stillOpen then record else []), ValueSome line.Text))
+            (struct (columns, [], ValueNone))
+        |> Seq.choose (fun (struct (_, _, text)) -> ValueOption.toOption text)
+
+    /// The lines of a delimited text stream whose first record is its header or is as wide as the rest, failing a file cut short as whole
+    /// does. The stream is left open.
+    let wholeLines (delimiter: char) (quoting: bool) (encoding: Encoding) (stream: Stream) : string seq =
+        whole ValueNone delimiter quoting (linesToEnd encoding stream)
+
+    /// The lines of a delimited zip entry, as wholeLines reads them; the entry is closed after the last.
+    let entryWholeLines (delimiter: char) (quoting: bool) (encoding: Encoding) (entry: ZipArchiveEntry) : string seq =
+        seq {
+            use stream = openEntry entry
+            yield! wholeLines delimiter quoting encoding stream
+        }
+
     /// The first item and the items after it, reading the sequence once. The rest is read on from where the first stopped.
     let private rest (enumerator: IEnumerator<'T>) =
         seq {
@@ -392,9 +514,9 @@ module internal BulkFile =
         | struct (_, ValueNone, _) -> fail $"{file} is empty"
 
     /// The header and records of a delimited file in a stream, read as strict UTF-8 unless a byte order mark says otherwise. The records stream
-    /// as they are read, and the stream is left open.
+    /// as they are read, and the stream is left open. A file cut short fails as whole fails it.
     let delimited (file: string) (delimiter: char) (quoting: bool) (stream: Stream) =
-        table file (records delimiter quoting (lines strictUtf8 stream))
+        table file (records delimiter quoting (wholeLines delimiter quoting strictUtf8 stream))
 
     /// The value under a column, trimmed; empty, or a column the record lacks, is absent.
     let cell (columns: IReadOnlyDictionary<string, int>) (name: string) (record: DelimitedRecord) =

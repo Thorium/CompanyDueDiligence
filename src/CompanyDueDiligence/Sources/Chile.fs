@@ -168,7 +168,7 @@ module internal Chile =
         let index, repeated =
             try
                 files
-                |> Seq.collect (fun file -> readFile (BulkFile.lines BulkFile.strictUtf8 file) ct)
+                |> Seq.collect (fun file -> readFile (BulkFile.wholeLines ';' true BulkFile.strictUtf8 file) ct)
                 |> Bulk.index (fun record -> normalRut record.Company.Number)
             with :? DecoderFallbackException ->
                 BulkFile.fail "A file holds text that isn't UTF-8"

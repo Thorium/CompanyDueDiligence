@@ -138,6 +138,7 @@ let ``a counted read of pages that state no counts is a failure`` () : Task =
                 Total = 0
                 Counts = ValueNone
                 ItemsRaw = []
+                Status = ValueNone
             }
 
         match! Api.Paging.allCountedAsync (fun _ -> false) (fun _ _ -> Task.FromResult(Ok(ValueSome page))) with

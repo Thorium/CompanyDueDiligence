@@ -5,7 +5,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <RootNamespace>CompanyDueDiligence</RootNamespace>
     <PackageId>CompanyDueDiligence</PackageId>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <Authors>Tuomas Hietanen</Authors>
     <PackageLicenseExpression>Unlicense</PackageLicenseExpression>
     <Description>A company due diligence case file for a compliance team: connects register records, filings, LEI data, sanctions list screening and vendor checks, with their links, flags and gaps, for an officer to decide. It decides nothing and never says clear. Reads 58 company registers in Europe, the Americas, Asia, Africa and Oceania, by API or from files the host downloads, and GLEIF. Unofficial; not affiliated with any of them.</Description>
@@ -15,7 +15,19 @@
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>icon.png</PackageIcon>
-    <PackageReleaseNotes>v1.0.0:
+    <PackageReleaseNotes>v1.0.1:
+- FIXED: a screening raises two names whose one distinctive word is the same, whatever its length, and a listed name of one word inside a longer screened name; PJSC, OJSC, CJSC, AO and NAO are legal forms
+- CHANGED: NameMatch.normalise spells Cyrillic (BGN/PCGN) and Greek (ELOT 743) letters in Latin, for screening and name search; a screened name holding another script is in NamesNotScreened, not NamesScreened
+- FIXED: Romania: a registration number the file doesn't hold in the form asked is NotAvailable, not "not held", as the file writes a number in one of two forms; a CUI it lacks is still not held
+- FIXED: Czechia reads "v likvidaci" whatever stands around it; Switzerland reads "in Nachlassliquidation", "in Liq." and "en liq.", and only as words of their own
+- FIXED: Companies House: an officer with an identification block is a legal entity, and one whose role doesn't say is Unknown, which a screening compares with entities and individuals
+- FIXED: Companies House: partial_data_available, super_secure_managing_officer_count and a filing_history_status other than available keep officers, owners and filings from reading as whole; each list is read against the company's profile
+- FIXED: a delimited bulk file that ends without a line end, in a record shorter than its header, is refused as cut short
+- FIXED: Malta: "C-10" and "C/10" are "C 10"; Chile SII: a line with more fields than its header is an unread line
+- FIXED: a Companies House answer over 32 MB or document over 256 MB is a failure; a Swiss search term XML can't carry, and an answer's text that is half a surrogate pair, are failures, not exceptions
+- CHANGED: BulkIndexes.openAsync refuses an index another version of the library wrote: save it again
+
+v1.0.0:
 - Companies House run live on 2026-11-08, on companies of each type
 - REMOVED: the Companies House client, Api and record types from the public API (BREAKING); Sources.companiesHouse builds the registry, which keeps filings, insolvency, documents and officer search
 - REMOVED: NameMatch.isMatch; NameMatch.normalise is public

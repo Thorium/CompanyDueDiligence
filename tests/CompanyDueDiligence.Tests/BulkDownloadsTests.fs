@@ -23,7 +23,8 @@ let private sized (bytes: int64) (id: string) =
         { entry with
             Delivery = BulkDelivery.Links(links |> List.map (fun link -> { link with ApproximateBytes = bytes }))
         }
-    | BulkDelivery.Resolved _ | BulkDelivery.ByHand _ -> entry
+    | BulkDelivery.Resolved _
+    | BulkDelivery.ByHand _ -> entry
 
 let private serbiaEntry = sized (fixtureBytes "serbia-companies.json") "RS"
 
@@ -72,21 +73,24 @@ let ``seven sources have fixed links, nine are resolved through a listing, and f
         [ "BA-BRC"; "EC"; "EE"; "PE"; "PY"; "RS"; "US-AK" ],
         ids (function
             | BulkDelivery.Links _ -> true
-            | BulkDelivery.Resolved _ | BulkDelivery.ByHand _ -> false)
+            | BulkDelivery.Resolved _
+            | BulkDelivery.ByHand _ -> false)
     )
 
     Assert.Equal<string list>(
         [ "AR-C"; "AU-ASIC"; "BR"; "CL-RES"; "CY"; "RO"; "RU-SME"; "SI"; "UA" ],
         ids (function
             | BulkDelivery.Resolved _ -> true
-            | BulkDelivery.Links _ | BulkDelivery.ByHand _ -> false)
+            | BulkDelivery.Links _
+            | BulkDelivery.ByHand _ -> false)
     )
 
     Assert.Equal<string list>(
         [ "BE"; "CL-SII"; "MD"; "US-FL" ],
         ids (function
             | BulkDelivery.ByHand _ -> true
-            | BulkDelivery.Links _ | BulkDelivery.Resolved _ -> false)
+            | BulkDelivery.Links _
+            | BulkDelivery.Resolved _ -> false)
     )
 
 [<Fact>]
@@ -566,7 +570,9 @@ let ``a fixed link's Last-Modified is the download's AsOf, kept with its stamp``
             Directory.Delete(folder, true)
     }
 
-let private librarysRegex = Text.RegularExpressions.Regex "\"library\": \"[^\"]*\",\\s*"
+let private librarysRegex =
+    Text.RegularExpressions.Regex "\"library\": \"[^\"]*\",\\s*"
+
 [<Fact>]
 let ``an index another library version wrote, or that names none, is rebuilt`` () : Task =
     task {
@@ -597,9 +603,12 @@ let ``an index another library version wrote, or that names none, is rebuilt`` (
                 do! File.WriteAllTextAsync(manifest, library.Replace(File.ReadAllText manifest, replacement))
                 Assert.Equal(BulkIndexState.NotBuilt, cache.IndexStateOf serbiaEntry)
 
-                // An index of another version still opens: only LoadAsync's reuse depends on the version.
+                // An index of another version isn't opened either: its numbers and names were written by that version's rules.
                 match! BulkIndexes.openAsync (Path.GetDirectoryName manifest) ct with
-                | Ok registry -> registry.Dispose()
+                | Error(RegistryFailure.RequestRefused reason) -> Assert.Contains("another version", reason)
+                | Ok registry ->
+                    registry.Dispose()
+                    failwith "An index of another library version was opened"
                 | Error failure -> failwith (RegistryFailure.describe failure)
 
                 do! load ()

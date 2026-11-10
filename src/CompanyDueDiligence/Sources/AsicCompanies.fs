@@ -227,7 +227,8 @@ module internal AsicCompanies =
     let build (file: Stream) (date: BulkFileDate) (ct: Threading.CancellationToken) : ICompanyRegistry =
         let index = BulkIndex<Held>()
 
-        BulkFile.perFile file (fun _ openFile -> companies ct (BulkFile.lines BulkFile.strictUtf8 (openFile ())))
+        BulkFile.perFile file (fun _ openFile ->
+            companies ct (BulkFile.wholeLines '\t' false BulkFile.strictUtf8 (openFile ())))
         |> Seq.concat
         |> Seq.iter (fun (acn, held) ->
             if currentName (column held.Header) (rowsOf held) = "" then

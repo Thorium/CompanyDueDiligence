@@ -562,11 +562,48 @@ let ``one distinctive word contained in a listed name is a possible match`` (scr
 [<InlineData("Consulting", "Zedland Consulting Group")>]
 [<InlineData("Solutions Ltd", "Zedland Solutions Works")>]
 [<InlineData("Zed", "Zedland Works")>]
-[<InlineData("Zedland Works", "Zedland")>]
-let ``a word that says nothing, part of a word, or a listed word in a longer name isn't raised``
+[<InlineData("Works Yland Capital", "Capital")>]
+[<InlineData("ZT Bank", "ZT")>]
+[<InlineData("Oil Trading", "Oil Holdings")>]
+[<InlineData("Zedal Trading", "Zedul Holding")>]
+let ``a word that says nothing, part of a word, or a short word spelled differently isn't raised``
     (screened: string, listed: string)
     =
     Assert.Equal(ValueNone, NameMatching.compare screened listed)
+
+[<Theory>]
+[<InlineData("Zedland Works", "Zedland")>]
+[<InlineData("Zedneft Yland GmbH", "Zedneft")>]
+[<InlineData("Yland Works ZTB", "ZTB")>]
+let ``a listed name of one word inside a screened name is a possible match`` (screened: string, listed: string) =
+    match NameMatching.compare screened listed with
+    | ValueSome(score, reason) ->
+        Assert.Equal(0.85, score)
+        Assert.Contains("one word of the listed name", reason)
+    | ValueNone -> failwith "No match"
+
+[<Theory>]
+[<InlineData("ZTB Bank", "ZTB")>]
+[<InlineData("Zedal Trading Ltd", "Zedal")>]
+[<InlineData("Zedal Group SA", "Zedal Holding")>]
+[<InlineData("Zedal", "Zedal Trading")>]
+let ``the same distinctive word is raised whatever its length and the generic words beside it``
+    (screened: string, listed: string)
+    =
+    match NameMatching.compare screened listed with
+    | ValueSome(score, reason) ->
+        Assert.Equal(0.85, score)
+        Assert.Contains("is the same", reason)
+    | ValueNone -> failwith "No match"
+
+[<Theory>]
+[<InlineData("PJSC Zedal")>]
+[<InlineData("Zedal OJSC")>]
+[<InlineData("CJSC Zedal")>]
+[<InlineData("AO Zedal")>]
+[<InlineData("NAO Zedal")>]
+let ``a joint-stock form is a legal form`` (screened: string) =
+    Assert.Equal(ValueSome 1., NameMatching.compare screened "Zedal" |> ValueOption.map fst)
 
 /// A list where every entry holds the words a screening must not flood on, in the shape of the real lists.
 let private crowded (entries: int) (words: string list) : Result<LoadedList, UnreadableList> =
@@ -614,3 +651,80 @@ let ``a word held in few enough entries is raised for each of them`` () =
     let result = SanctionsScreening.screen lists [ company "Zedergy" ] [] at
     Assert.Equal(NameMatching.CommonWordEntries, result.PossibleMatches.Length)
     Assert.Empty result.NamesNotScreened
+
+/// A list of entries each named by one word alone.
+let private oneWordEntries (entries: int) (word: string) : Result<LoadedList, UnreadableList> =
+    Ok
+        {
+            List = SanctionsListName.OfacSdn
+            Dated = dated
+            StatedInFile = ValueNone
+            Entries =
+                [
+                    for index in 1..entries ->
+                        {
+                            EntryId = $"{word}{index}"
+                            Party = ListedParty.Entity
+                            Names = [ word ]
+                            Programme = ValueNone
+                            BirthYears = []
+                            Countries = []
+                        }
+                ]
+            Notes = []
+        }
+
+[<Fact>]
+let ``a listed one-word name common in the lists doesn't flood a longer screened name`` () =
+    let name = "Zedergy Works Yland"
+
+    let few =
+        SanctionsScreening.screen [ oneWordEntries NameMatching.CommonWordEntries "ZEDERGY" ] [ company name ] [] at
+
+    let many =
+        SanctionsScreening.screen
+            [ oneWordEntries (NameMatching.CommonWordEntries + 1) "ZEDERGY" ]
+            [ company name ]
+            []
+            at
+
+    Assert.Equal(NameMatching.CommonWordEntries, few.PossibleMatches.Length)
+    Assert.Empty many.PossibleMatches
+
+[<Theory>]
+[<InlineData("ООО «Зедторг»", "OOO ZEDTORG")>]
+[<InlineData("Щербаков Юрий Сергеевич", "SHCHERBAKOV YURIY SERGEEVICH")>]
+[<InlineData("Объединение Жёлтый Цех", "OBEDINENIE ZHELTYY TSEKH")>]
+[<InlineData("Ґалаґан Євгенія Їжак", "GALAGAN YEVGENIYA YIZHAK")>]
+[<InlineData("Ευστάθιος Γεωργίου", "EFSTATHIOS GEORGIOU")>]
+[<InlineData("Αυγή Άγγελος Χρήστου", "AVGI ANGELOS CHRISTOU")>]
+[<InlineData("Zedland Ελλάς ООО", "ZEDLAND ELLAS OOO")>]
+let ``Cyrillic and Greek letters are spelled in Latin`` (name: string, expected: string) =
+    Assert.Equal(expected, NameMatching.normalise name)
+    Assert.False(NameMatching.holdsOtherScript name)
+
+[<Theory>]
+[<InlineData("ООО «Зедланд Мининг»")>]
+[<InlineData("Ζεδλανδ Μινινγ")>]
+let ``a Cyrillic or Greek name is screened in Latin letters`` (name: string) =
+    let result = SanctionsScreening.screen allLists [ company name ] [] at
+    Assert.Equal<string list>([ name ], result.NamesScreened)
+    Assert.Empty result.NamesNotScreened
+    Assert.Contains(result.PossibleMatches, (fun found -> found.ListedName = "ZEDLAND MINING"))
+
+[<Theory>]
+[<InlineData("זדלנד כרייה בע״מ")>]
+[<InlineData("شركة زدلاند للتعدين")>]
+[<InlineData("泽德兰矿业有限公司")>]
+[<InlineData("Zedland Mining 株式会社")>]
+let ``a name holding another script's letters never counts as screened`` (name: string) =
+    let result = SanctionsScreening.screen allLists [ company name ] [] at
+    Assert.Empty result.NamesScreened
+    Assert.Contains(result.NamesNotScreened, (fun held -> held.Who = name && held.Reason.Contains "script"))
+
+[<Fact>]
+let ``the Latin words of a name holding another script are still compared`` () =
+    let result =
+        SanctionsScreening.screen allLists [ company "Zedland Mining 株式会社" ] [] at
+
+    Assert.Contains(result.PossibleMatches, (fun found -> found.ListedName = "ZEDLAND MINING"))

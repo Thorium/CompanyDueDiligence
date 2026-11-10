@@ -160,7 +160,18 @@ let ``a bulk file on a network share or a relative path is refused`` () : Task =
     task {
         use server = new LocalServer()
 
-        for path in [ @"\othersharecompany.xlsx"; "company.xlsx" ] do
+        // A share's name opens with two separators, of either kind and in any mix; a device path with two and a question mark.
+        let refused =
+            [
+                for first in [ "/"; "\\" ] do
+                    for second in [ "/"; "\\" ] do
+                        first + second + "other/share/company.xlsx"
+
+                String.Join("\\", [ ""; ""; "?"; "C:"; "company.xlsx" ])
+                "company.xlsx"
+            ]
+
+        for path in refused do
             let paths = Collections.Generic.Dictionary<string, string array>()
             paths["file"] <- [| path |]
 

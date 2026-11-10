@@ -29,6 +29,8 @@ let private profile status detail : CompanyProfile =
         Foreign = ValueNone
         Branch = ValueNone
         ExternalRegistrationNumber = ValueNone
+        PartialData = ValueNone
+        SuperSecureManagingOfficers = ValueNone
         ServiceAddress = ValueNone
         Raw = "{}"
     }

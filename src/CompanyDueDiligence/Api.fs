@@ -281,6 +281,8 @@ module Paging =
             Counts: ListCounts voption
             Total: int
             Complete: bool
+            /// The first page's filing_history_status.
+            Status: string voption
         }
 
     /// The items, in order, up to most of them. ValueNone when the first page is a 404.
@@ -302,6 +304,7 @@ module Paging =
                         Counts = listed.Counts
                         Total = listed.Total
                         Complete = complete
+                        Status = listed.Status
                     }
             )
 
@@ -370,12 +373,13 @@ module Paging =
                 return result |> Result.map (ValueOption.map _.Items)
         }
 
-    /// The first items of the list, at most most of them, in at most MaxPages calls, with the total the list states and whether that was all of it.
-    /// ValueNone when the first page is a 404. The same checks as allUpToAsync apply to the pages read.
+    /// The first items of the list, at most most of them, in at most MaxPages calls, with the total the list states, whether that was all of it,
+    /// and the status its first page states, if it states one. ValueNone when the first page is a 404. The same checks as allUpToAsync apply to
+    /// the pages read.
     let firstAsync
         (most: int)
         (fetch: int -> int -> Task<Result<Page<'T> voption, CompaniesHouseFailure>>)
-        : Task<Result<('T list * int * bool) voption, CompaniesHouseFailure>> =
+        : Task<Result<('T list * int * bool * string voption) voption, CompaniesHouseFailure>> =
         task {
             if most < 1 then
                 return Error(InvalidRequest "most must be positive")
@@ -384,7 +388,7 @@ module Paging =
 
                 return
                     result
-                    |> Result.map (ValueOption.map (fun read -> read.Items, read.Total, read.Complete))
+                    |> Result.map (ValueOption.map (fun read -> read.Items, read.Total, read.Complete, read.Status))
         }
 
     /// allUpToAsync with MaxPages.
@@ -725,7 +729,12 @@ module FilingHistory =
     [<Literal>]
     let MostRead = 1000
 
-    /// The newest filings, at most MostRead of them, with the total the list states and whether that was all of them. The list is newest first.
+    /// The status of a filing history that Companies House holds whole; the only one the specification lists.
+    [<Literal>]
+    let Available = "filing-history-available"
+
+    /// The newest filings, at most MostRead of them, with the total the list states, whether that was all of them, and the list's
+    /// filing_history_status. The list is newest first.
     let recentAsync client number categories ct =
         Paging.firstAsync MostRead (fun start size -> pageAsync client number categories start size ct)
 

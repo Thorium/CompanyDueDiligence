@@ -336,9 +336,16 @@ type internal CompaniesHouseClient
         http
 
     let keyed =
-        limited (new HttpClient(new KeyHandler(authorization, Endpoints.origins endpoints, handler), false))
+        limited (
+            new HttpClient(
+                new KeyHandler(authorization, Endpoints.origins endpoints, handler),
+                false,
+                MaxResponseContentBufferSize = CompaniesHouseClient.LargestAnswer
+            )
+        )
 
-    let keyless = limited (new HttpClient(handler, false))
+    let keyless =
+        limited (new HttpClient(handler, false, MaxResponseContentBufferSize = CompaniesHouseClient.LargestDocument))
 
     internal new(credentials, endpoints, handler, timeout) =
         CompaniesHouseClient(credentials, endpoints, handler, timeout, Pacer(Pacing.documented))
@@ -346,6 +353,12 @@ type internal CompaniesHouseClient
     new(credentials, endpoints, handler) = CompaniesHouseClient(credentials, endpoints, handler, ValueNone)
 
     member _.Endpoints = endpoints
+
+    /// The most an API answer may hold, as SourceConnection's: a larger one is a TransportError instead of filling memory.
+    static member internal LargestAnswer = 32L * 1024L * 1024L
+
+    /// The most a filed document may hold; a larger one is a TransportError. A choice made without data.
+    static member internal LargestDocument = 256L * 1024L * 1024L
 
     /// Sends the key, to the client's endpoints only.
     member internal _.Keyed = keyed

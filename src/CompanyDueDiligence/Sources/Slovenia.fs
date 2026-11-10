@@ -104,11 +104,14 @@ module internal Slovenia =
 
     /// Builds the register from opsiprs.csv as the host downloaded it.
     let build (file: Stream) (date: BulkFileDate) (ct: CancellationToken) : ICompanyRegistry =
-        match BulkFile.splitAt (fun _ -> true) (BulkFile.lines BulkFile.strictUtf8 file) with
+        match BulkFile.splitAt (fun _ -> true) (BulkFile.linesToEnd BulkFile.strictUtf8 file) with
         | struct (_, ValueNone, _) -> BulkFile.fail "opsiprs.csv is empty"
-        | struct (_, ValueSome headerLine, lines) ->
+        | struct (_, ValueSome header, rest) ->
+            let headerLine = header.Text
             let delimiter = delimiterOf headerLine
-            let columns = resolve (BulkFile.split delimiter true headerLine)
+            let names = BulkFile.split delimiter true headerLine
+            let columns = resolve names
+            let lines = BulkFile.whole (ValueSome names.Length) delimiter true rest
 
             for column in [ "number"; "name" ] do
                 if not (columns.ContainsKey column) then

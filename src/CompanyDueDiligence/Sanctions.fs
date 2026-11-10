@@ -780,9 +780,13 @@ module SanctionsScreening =
                     WouldClose = "Download this list and pass its text with its date"
                 })
 
-        let screenable, blank =
+        let compared, blank =
             names
             |> List.partition (fun name -> not (NameMatching.tokens name.Name).IsEmpty)
+
+        // The lists' names are Latin, so a name holding another script's letters is compared by its other words only, and never counts as screened.
+        let otherScript, screenable =
+            compared |> List.partition (fun name -> NameMatching.holdsOtherScript name.Name)
 
         let prepared =
             read
@@ -791,27 +795,32 @@ module SanctionsScreening =
                 list.Entries
                 |> List.map (fun entry -> entry, entry.Names |> List.map (fun name -> name, NameMatching.prepare name)))
 
-        let entriesHolding (word: string) =
+        let screenedWords =
+            compared
+            |> List.collect (fun name -> NameMatching.tokens name.Name)
+            |> Collections.Generic.HashSet
+
+        // Each word of a screened name with the count of listed entries holding it, from one pass over the lists.
+        let commonWords =
             prepared
-            |> List.sumBy (fun (_, entries) ->
+            |> Seq.collect (fun (_, entries) ->
                 entries
-                |> List.filter (fun (_, entryNames) ->
-                    entryNames |> List.exists (fun (_, held) -> held.WordSet.Contains word))
-                |> List.length)
+                |> Seq.collect (fun (_, entryNames) ->
+                    entryNames
+                    |> Seq.collect (fun (_, held) -> held.Words)
+                    |> Seq.filter screenedWords.Contains
+                    |> Seq.distinct))
+            |> Seq.countBy id
+            |> Seq.filter (fun (_, entries) -> entries > NameMatching.CommonWordEntries)
+            |> Seq.map fst
+            |> Set.ofSeq
 
         let loneWords =
-            screenable
+            compared
             |> List.choose (fun name ->
                 match NameMatching.tokens name.Name with
                 | [ word ] -> Some(name.Name, word)
                 | _ -> None)
-
-        let commonWords =
-            loneWords
-            |> List.map snd
-            |> List.distinct
-            |> List.filter (fun word -> entriesHolding word > NameMatching.CommonWordEntries)
-            |> Set.ofList
 
         // Raising a common word would bury the review, so such a name is compared only as a whole, and that is stated.
         let heldBack =
@@ -846,9 +855,17 @@ module SanctionsScreening =
                            Who = name.Name
                            Reason = "The name holds nothing to compare"
                        }))
+                @ (otherScript
+                   |> List.map (fun name ->
+                       {
+                           Who = name.Name
+                           Reason =
+                               "The name holds letters of a script that isn't spelled in Latin here, so those words weren't compared with the lists"
+                       })
+                   |> List.distinct)
                 @ heldBack
             PossibleMatches =
-                screenable
+                compared
                 |> List.collect (fun name -> prepared |> List.collect (matchesIn commonWords.Contains name))
                 |> List.sortByDescending _.Score
         }

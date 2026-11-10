@@ -46,9 +46,10 @@ module internal Malta =
             | "Converted to SE" -> CompanyStanding.Closed word
             | other -> CompanyStanding.Unknown(ValueSome other)
 
-    let private numberRegex = Regex @"\A([A-Z]+)\s*([0-9A-Z/\-]+)\z"
+    let private numberRegex = Regex @"\A([A-Z]+)[\s.\-/]*([0-9][0-9A-Z/\-]*)\z"
 
-    /// A number in the register's spelling, such as "C 1234". The prefix is what tells its registers apart, so one without a prefix isn't sent.
+    /// A number in the register's spelling, a prefix, a space and the number, such as "C 1234": "C1234", "C-1234" and "C/1234" are that
+    /// number. The prefix is what tells its registers apart, so one without a prefix isn't sent.
     let normalNumber (number: string) =
         let found =
             numberRegex.Match(

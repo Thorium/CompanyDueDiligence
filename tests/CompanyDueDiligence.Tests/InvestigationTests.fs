@@ -994,6 +994,7 @@ let ``scenario 1: what the UK form and the home papers say of capital is set sid
             new FakeHandler(companiesHouse (Map [ "FC000001", (overseasProfile, [], [], overseasFilings) ]))
 
         let! case = Investigation.openAsync (chSources handler) options (start "FC000001") ct
+
         let runTail () =
             let document = case.Documents.Head
 
@@ -1068,6 +1069,7 @@ let ``scenario 1: what the UK form and the home papers say of capital is set sid
             // What the officer read closed that document's own gap, and left the home record's open.
             Assert.Contains(gapsOn "filing to read" withHome, (fun gap -> gap.ClosedBy.IsSome))
             Assert.Contains(gapsOn "Delaware" withHome, (fun gap -> gap.ClosedBy.IsNone))
+
         runTail ()
     }
 
@@ -1276,6 +1278,7 @@ let ``scenario 2: a forfeited branch shows on that branch, and says nothing abou
         let! afterTexas = follow tx "0800000001" usTx (expectOk afterDelaware)
         let! afterUtah = follow ut "6660001" usUt (expectOk afterTexas)
         let! afterMissouri = follow mo "7770001" usMo (expectOk afterUtah)
+
         let runTail () =
             let full = expectOk afterMissouri
 
@@ -1322,6 +1325,7 @@ let ``scenario 2: a forfeited branch shows on that branch, and says nothing abou
                 |> List.filter (fun item -> item.Text.StartsWith "Declared link, not evidenced")
                 |> List.length
             )
+
         runTail ()
     }
 
@@ -1387,6 +1391,7 @@ let ``scenario 3: the filing's creditors and lender become links resting on its 
             new FakeHandler(companiesHouse (Map [ "00000021", (filedCompany, [], [], insolvencyFilings) ]))
 
         let! case = Investigation.openAsync (chSources handler) options (start "00000021") ct
+
         let runTail () =
             let document = case.Documents |> List.find (fun item -> item.TransactionId = "T9")
 
@@ -1404,7 +1409,11 @@ let ``scenario 3: the filing's creditors and lender become links resting on its 
                 |> expectOk
 
             let named name jurisdiction =
-                CaseFile.entityOf (EntityIdentity.NameOnly(name, "AM03 of 2021")) name PartyKind.LegalEntity jurisdiction
+                CaseFile.entityOf
+                    (EntityIdentity.NameOnly(name, "AM03 of 2021"))
+                    name
+                    PartyKind.LegalEntity
+                    jurisdiction
 
             let fund = named "Example Fund Managers LLP" (ValueSome gb)
 
@@ -1448,6 +1457,7 @@ let ``scenario 3: the filing's creditors and lender become links resting on its 
                 gapsOn "filing to read" linked |> List.filter (fun gap -> gap.ClosedBy.IsNone)
 
             Assert.Equal(1, open'.Length)
+
         runTail ()
     }
 
@@ -2948,9 +2958,7 @@ let ``a downloaded file that states no date of its own is a data date gap, even 
         let! built =
             BulkSources.bosniaBrckoAsync stream { DownloadedAt = at; AsOf = ValueNone } ct
 
-        let registry =
-            built
-            |> Result.defaultWith (RegistryFailure.describe >> failwith)
+        let registry = built |> Result.defaultWith (RegistryFailure.describe >> failwith)
 
         let! case = openOn [ registry ] "1-369" (Jurisdiction.ofCode "BA-BRC")
         let gap = gapsOn "data date" case |> List.exactlyOne
@@ -2985,6 +2993,41 @@ let ``a filing history read only in part is a gap naming how many were read`` ()
         let gap = case.Gaps |> List.find (fun item -> item.Subject = "older filings")
         Assert.Equal($"The newest {Api.FilingHistory.MostRead} of {total} filings were read", gap.Detail)
         Assert.Equal(Api.FilingHistory.MostRead, case.Documents.Length)
+    }
+
+[<Fact>]
+let ``a filing history the register marks as limited is a gap of its own, though every filing it holds was read``
+    ()
+    : Task =
+    task {
+        let inner = companiesHouse (Map [ "00000021", (filedCompany, [], [], []) ])
+
+        let history (items: string) =
+            $"""{{"total_count":1,"items_per_page":1,"start_index":0,"filing_history_status":"filing-history-available-limited-partnership-from-2014","items":[{items}]}}"""
+
+        use handler =
+            new FakeHandler(fun call ->
+                if Uri(call.Uri).AbsolutePath.EndsWith "/filing-history" then
+                    ok (
+                        history (
+                            if startIndexOf call = 0 then
+                                """{"transaction_id":"t0","category":"accounts"}"""
+                            else
+                                ""
+                        )
+                    )
+                else
+                    inner call)
+
+        let! case = Investigation.openAsync (chSources handler) options (start "00000021") ct
+
+        let gap =
+            case.Gaps
+            |> List.find (fun item -> item.Subject = "filings the register doesn't hold")
+
+        Assert.Contains("isn't the whole of it", gap.Detail)
+        Assert.Contains("the 1 filings it holds were read", gap.Detail)
+        Assert.DoesNotContain(case.Gaps, (fun item -> item.Subject = "older filings"))
     }
 
 [<Fact>]

@@ -447,6 +447,7 @@ type internal BulkAnswers
         inner: ICompanyRegistry,
         normal: string -> string voption,
         withheld: IReadOnlyDictionary<string, string>,
+        cantTellAbsent: string -> string voption,
         excluded: bool,
         date: BulkFileDate,
         aliases: struct (string * string) seq
@@ -459,7 +460,7 @@ type internal BulkAnswers
         | ValueSome key ->
             match withheld.TryGetValue key with
             | true, reason -> ValueSome reason
-            | _ -> ValueNone
+            | _ -> cantTellAbsent key
         | ValueNone -> ValueNone
 
     let notAvailable reason : Evidence<Availability<'T>> =
@@ -493,7 +494,8 @@ type internal BulkAnswers
     /// Builds the registry over a file's tally, keeping apart the numbers held twice and those of rows that couldn't be read. aliases are other
     /// keys, such as a second identifier, withheld with their reasons without being records. keyAliases are keys the source's own normaliser
     /// gives that normal answers under another key, with that key, for writing an index; they are read only then. A NotHeld absence can't tell
-    /// when rows naming no number couldn't be read.
+    /// when rows naming no number couldn't be read. cantTellAbsent gives, for a key the file doesn't hold, the reason its absence says nothing,
+    /// which the source's BulkSourceShape gives an index too.
     static member Over
         (
             coverage: RegistryCoverage,
@@ -505,7 +507,8 @@ type internal BulkAnswers
             officersNotOffered: string,
             owners: OwnerPurpose -> Availability<OwnerListing>,
             ?aliases: (string * string) seq,
-            ?keyAliases: struct (string * string) seq
+            ?keyAliases: struct (string * string) seq,
+            ?cantTellAbsent: string -> string voption
         ) : ICompanyRegistry =
         let repeatedReason =
             "The file holds several records for this number, which can't be told apart"
@@ -535,7 +538,12 @@ type internal BulkAnswers
         let excluded =
             rows.Repeated.Count > 0 || not rows.Unreadable.IsEmpty || rows.WithoutNumber > 0
 
-        new BulkAnswers(inner, normal, withheld, excluded, date, defaultArg keyAliases Seq.empty)
+        let cantTell (key: string) =
+            match cantTellAbsent with
+            | Some reasonOf when not (rows.Held.ContainsKey key) -> reasonOf key
+            | _ -> ValueNone
+
+        new BulkAnswers(inner, normal, withheld, cantTell, excluded, date, defaultArg keyAliases Seq.empty)
 
     interface IBulkRegistry
 

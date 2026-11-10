@@ -496,6 +496,13 @@ module internal BulkSourceShape =
     let tryNormal (id: string) =
         shapes.TryFind id |> ValueOption.ofOption
 
+    /// For a key the source's file doesn't hold, the reason its absence says nothing; ValueNone for a key that is then not held. Only a
+    /// source whose file writes one number in several forms has such keys.
+    let cantTellAbsent (id: string) : string -> string voption =
+        match id with
+        | "RO" -> Romania.cantTellAbsent
+        | _ -> fun _ -> ValueNone
+
 /// Indexes on disk of bulk registers, built once per download. Opening one takes milliseconds and holds three file handles, not records, and it
 /// answers exactly as the registry it was written from. Lookups read the files at an offset and are safe in parallel; a search reads the whole
 /// names file, which for the largest sources is a few hundred megabytes per search. Not for WebAssembly, where bulk sources aren't built.
@@ -593,16 +600,21 @@ module BulkIndexes =
         saveUkraineWith [] uo date directory ct
 
     /// Opens an index saveAsync wrote. It answers exactly as the registry it was written from, and holds the index's files open until it is
-    /// disposed. RequestRefused for a folder with no index, or one of another format or of a source this version
-    /// doesn't know; UnreadableAnswer for one that is damaged or cut short.
+    /// disposed. RequestRefused for a folder with no index, or one of another format, of another version of this library, whose rules for
+    /// numbers and names can differ, or of a source this version doesn't know; UnreadableAnswer for one that is damaged or cut short.
     let openAsync (directory: string) (ct: CancellationToken) : Task<Result<IBulkRegistry, RegistryFailure>> =
         ct.ThrowIfCancellationRequested()
 
         BulkStore.readManifest directory
         |> Result.bind (fun manifest ->
             match BulkSourceShape.tryNormal manifest.Source with
+            | ValueSome _ when manifest.Library <> ValueSome BulkStore.Library ->
+                Error(
+                    RegistryFailure.RequestRefused
+                        "The index was written by another version of this library: save it again from the source's files"
+                )
             | ValueSome normal ->
-                BulkStore.openWith directory normal manifest
+                BulkStore.openWith directory normal (BulkSourceShape.cantTellAbsent manifest.Source) manifest
                 |> Result.map (fun registry -> registry :?> IBulkRegistry)
             | ValueNone ->
                 Error(

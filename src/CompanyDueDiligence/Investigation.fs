@@ -147,6 +147,7 @@ module internal Reading =
         && number |> Seq.exists (fun c -> Char.IsLetterOrDigit c && c <> '0')
 
     let private sameNumberRegex = Regex @"\s+"
+
     let sameNumber (a: string) (b: string) =
         let key (number: string) =
             sameNumberRegex.Replace(NameMatching.normalise number, "").TrimStart '0'
@@ -932,14 +933,28 @@ module Investigation =
                                 |> ValueOption.map (fun total -> $" of {total}")
                                 |> ValueOption.defaultValue ""
 
-                            case
-                            |> CaseFile.addGap
-                                (ValueSome pending.Key)
-                                GapReach.ThisEntity
-                                GapKind.NotChecked
-                                "older filings"
-                                $"The newest {filings.Length}{total} filings were read"
-                                "A person reading the rest of the register's filing history"
+                            // Read to the count the register states, and still not whole: the register itself marks the history as limited.
+                            let readToTotal =
+                                history.Total |> ValueOption.exists (fun total -> filings.Length >= total)
+
+                            if readToTotal then
+                                case
+                                |> CaseFile.addGap
+                                    (ValueSome pending.Key)
+                                    GapReach.ThisEntity
+                                    GapKind.NotPublished
+                                    "filings the register doesn't hold"
+                                    $"{answer.Source} states this filing history isn't the whole of it; the {filings.Length} filings it holds were read"
+                                    "The body that holds the rest, which the company's record names, or a person asking the company"
+                            else
+                                case
+                                |> CaseFile.addGap
+                                    (ValueSome pending.Key)
+                                    GapReach.ThisEntity
+                                    GapKind.NotChecked
+                                    "older filings"
+                                    $"The newest {filings.Length}{total} filings were read"
+                                    "A person reading the rest of the register's filing history"
 
                     let capital =
                         filings

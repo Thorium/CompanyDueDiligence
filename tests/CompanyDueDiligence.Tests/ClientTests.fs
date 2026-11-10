@@ -177,6 +177,19 @@ let ``a held company is ValueSome`` () : Task =
     }
 
 [<Fact>]
+let ``an answer larger than the client reads is a TransportError, not held in memory`` () : Task =
+    task {
+        let padding = String('x', int CompaniesHouseClient.LargestAnswer)
+
+        use handler =
+            new FakeHandler(fun _ -> ok $"""{{"company_number":"00000006","company_name":"A","padding":"{padding}"}}""")
+
+        match! Api.Companies.getAsync (clientWith handler) "00000006" ct with
+        | Error(TransportError _) -> ()
+        | other -> failwith $"%A{other |> Result.map (fun _ -> ())}"
+    }
+
+[<Fact>]
 let ``a 401 is KeyRefused and a 500 is an ApiError to retry`` () : Task =
     task {
         use refused = new FakeHandler(fun _ -> answer 401 "{}")

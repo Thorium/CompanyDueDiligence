@@ -188,8 +188,8 @@ module internal SourceAnswer =
             LongestWait = TimeSpan.FromSeconds 30.
         }
 
-    /// Runs parse over the reply's JSON. An answer that isn't JSON, lacks what parse requires, or holds a value out of range or of the wrong
-    /// form is UnreadableAnswer, quoting nothing from it.
+    /// Runs parse over the reply's JSON. An answer that isn't JSON, lacks what parse requires, or holds a value out of range, of the wrong
+    /// form or kind, or a text that isn't whole UTF-16, is UnreadableAnswer, quoting nothing from it.
     let json (reply: SourceReply) (parse: JsonElement -> 'T) =
         try
             use document = JsonDocument.Parse reply.Body
@@ -202,6 +202,9 @@ module internal SourceAnswer =
         | :? FormatException ->
             Error(RegistryFailure.UnreadableAnswer "A value in the answer isn't of the form expected")
         | :? OverflowException -> Error(RegistryFailure.UnreadableAnswer "A number in the answer is too large")
+        // A text that isn't whole UTF-16, such as half a surrogate pair, or a value of another kind than the one read.
+        | :? InvalidOperationException ->
+            Error(RegistryFailure.UnreadableAnswer "A value in the answer can't be read as the kind expected")
 
     let evidence (coverage: RegistryCoverage) (reply: SourceReply) asOf value : Evidence<_> =
         {

@@ -1175,3 +1175,38 @@ let ``a key longer than an index holds fails the save, not with an exception`` (
         finally
             removeFolder folder
     }
+
+// Numbers a file writes in more than one form
+
+[<Fact>]
+let ``Romania's index can't tell a registration number absent, and holds no CUI it lacks, as the registry answers``
+    ()
+    : Task =
+    task {
+        let pid, build = source "RO"
+        let! memory = built build
+        let folder = freshFolder ()
+        let ro = List.head memory.Coverage.Jurisdictions
+
+        try
+            let! disk = saved pid memory folder
+
+            try
+                for registry in [ memory; disk :> ICompanyRegistry ] do
+                    for number in [ "J40/3266/2019"; "J1991001116400"; "J40/99999/2020" ] do
+                        match! registry.TryFindAsync(number, ro, ct) with
+                        | Ok { Value = NotAvailable reason } -> Assert.Contains("two forms", reason)
+                        | other -> failwith $"%s{number}: %A{other}"
+
+                    match! registry.TryFindAsync("99999999", ro, ct) with
+                    | Ok { Value = Available ValueNone } -> ()
+                    | other -> failwith $"%A{other}"
+
+                    match! registry.TryFindAsync("J2019003266407", ro, ct) with
+                    | Ok { Value = Available(ValueSome company) } -> Assert.Equal("J2019003266407", company.Number)
+                    | other -> failwith $"%A{other}"
+            finally
+                dispose disk
+        finally
+            removeFolder folder
+    }

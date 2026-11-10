@@ -143,14 +143,15 @@ module internal ChileSii =
             ValueNone
 
     /// Builds the register from the names zip and the addresses zip as published. Only current domiciles (VIGENCIA S) are kept. A names line
-    /// with fewer fields than its header is unreadable, as a missing end date would read as registered. Each legal person is held as its lines,
-    /// as UTF-8, and read when asked for: the nómina holds millions.
+    /// with fewer fields than its header is unreadable, as a missing end date would read as registered, and so is one with more, as a tab
+    /// inside a field moves every field after it. Each legal person is held as its lines, as UTF-8, and read when asked for: the nómina
+    /// holds millions.
     let build (names: Stream) (addresses: Stream) (date: BulkFileDate) (ct: CancellationToken) : ICompanyRegistry =
         use namesZip = BulkFile.openZip names
         use addressesZip = BulkFile.openZip addresses
         let kinds = subtypes namesZip
         let index = BulkIndex<byte array>()
-        // RUTs on a line too short to read, so that another line for one isn't taken alone.
+        // RUTs on a line too short or too long to read, so that another line for one isn't taken alone.
         let shortRows = HashSet<string>()
 
         // Both files stream line by line: names first, then each current domicile is tied to its RUT.
@@ -160,6 +161,7 @@ module internal ChileSii =
             | ValueSome(struct (head, lines)) ->
                 let header = headerOf [ "RUT"; "DV"; "RAZON_SOCIAL"; "FECHA_TG_VIG" ] head
                 let width = (header.Values |> Seq.max) + 1
+                let columns = (BulkFile.split '\t' false head).Length
 
                 header,
                 lines
@@ -173,7 +175,9 @@ module internal ChileSii =
                             let row = rowOf line
 
                             match rutOf header row, BulkFile.cell header "RAZON_SOCIAL" row with
-                            | ValueSome number, ValueSome _ when row.Fields.Length < width ->
+                            | ValueSome number, ValueSome _ when
+                                row.Fields.Length < width || row.Fields.Length > columns
+                                ->
                                 shortRows.Add number |> ignore
 
                                 if index.Withhold number then

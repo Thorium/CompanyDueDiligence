@@ -1042,6 +1042,33 @@ let ``an SII line is split at tabs only, as the files quote nothing`` () : Task 
         Assert.Equal(CompanyStanding.Closed "Término de giro 28-04-2022", (companyOf quoted).Standing)
     }
 
+[<Fact>]
+let ``an SII line with a tab inside its name is an unread line, never a record with its dates moved`` () : Task =
+    task {
+        let names =
+            siiNames
+                [
+                    "RUT\tDV\tCOD_SUBTIPO\tRAZON_SOCIAL\tFECHA_INICIO_VIG\tFECHA_TG_VIG"
+                    // Closed, and would read as registered with the end date pushed past the last column.
+                    "76007222\t2\t211\tCONTRERAS\tE HIJO LIMITADA\t\t28-04-2022"
+                    // Open, and would read as closed with the start date in the end date's column.
+                    "50092210\t9\t223\tOLAVE\tASCENSORES SPA\t01-01-1993\t"
+                    "50036540\t4\t213\tEL TALLER\t01-01-1993\t"
+                ]
+
+        let! registry = built (BulkSources.chileSiiAsync names (chileAddresses ()) date ct)
+
+        for number in [ "76007222-2"; "50092210-9" ] do
+            let! moved = find registry number cl
+
+            match moved.Value with
+            | NotAvailable reason -> Assert.Contains("2 lines couldn't be read", reason)
+            | other -> failwith $"%s{number}: %A{other}"
+
+        let! whole = find registry "50036540-4" cl
+        Assert.Equal(CompanyStanding.Registered ValueNone, (companyOf whole).Standing)
+    }
+
 let private argentinaWith (entities: string) =
     zipOf
         [

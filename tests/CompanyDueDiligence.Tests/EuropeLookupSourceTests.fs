@@ -395,6 +395,25 @@ let ``every ARES state has a standing, and a new one is unknown``
     Assert.StartsWith(expected, $"%A{Czechia.standing (ValueSome vr) (ValueSome res) (ValueSome ir) name}")
 
 [<Theory>]
+[<InlineData("X s.r.o. \"v likvidaci\"", "WindingUp")>]
+[<InlineData("X s.r.o. „v likvidaci“", "WindingUp")>]
+[<InlineData("X s.r.o. (v likvidaci)", "WindingUp")>]
+[<InlineData("X, s.r.o.,v likvidaci", "WindingUp")>]
+[<InlineData("X s.r.o.-v likvidaci", "WindingUp")>]
+[<InlineData("X s.r.o.  V  LIKVIDACI", "WindingUp")>]
+[<InlineData("v likvidaci X s.r.o.", "WindingUp")>]
+[<InlineData("Nov likvidaci s.r.o.", "Active")>]
+[<InlineData("X v likvidacich s.r.o.", "Active")>]
+[<InlineData("Likvidace X s.r.o.", "Active")>]
+let ``"v likvidaci" is read whatever stands around it, and only as words of their own``
+    (name: string, expected: string)
+    =
+    let standing =
+        Czechia.standing (ValueSome "AKTIVNI") (ValueSome "AKTIVNI") (ValueSome "NEEXISTUJICI") name
+
+    Assert.StartsWith(expected, $"%A{standing}")
+
+[<Theory>]
 [<InlineData("421", "ForeignRegistration")>]
 [<InlineData("426", "ForeignRegistration")>]
 [<InlineData("121", "Home")>]
@@ -1136,6 +1155,33 @@ let ``every UID and commercial register status has a standing, and a new one is 
     Assert.StartsWith(expected, $"%A{Switzerland.standing (given uid) (given register) (given entry) name}")
 
 [<Theory>]
+[<InlineData("X AG in Nachlassliquidation", "WindingUp")>]
+[<InlineData("X AG in Liq.", "WindingUp")>]
+[<InlineData("X AG IN LIQUIDATION", "WindingUp")>]
+[<InlineData("X AG (in Liquidation)", "WindingUp")>]
+[<InlineData("X SA en liq.", "WindingUp")>]
+[<InlineData("X SA en liquidation concordataire", "WindingUp")>]
+[<InlineData("X SA in liquidazione", "WindingUp")>]
+[<InlineData("X SA in liquidazione concordataria", "WindingUp")>]
+[<InlineData("X Sagl in liq.", "WindingUp")>]
+[<InlineData("X SA en liquidaziun", "WindingUp")>]
+[<InlineData("Liquidation Services AG", "Active")>]
+[<InlineData("Garden Liquidation AG", "Active")>]
+[<InlineData("X in Liquidationen AG", "Active")>]
+[<InlineData("Berlin Liq. AG", "Active")>]
+let ``liquidation wording is read in each of its forms, and a name that only holds the word isn't``
+    (name: string, expected: string)
+    =
+    for register, entry in [ ValueSome "2", ValueSome "1"; ValueSome "3", ValueNone ] do
+        let standing = Switzerland.standing (ValueSome "3") register entry name
+
+        // Off the commercial register, a live entity without the wording is Registered, not Active.
+        if expected = "Active" then
+            Assert.False(standing.IsWindingUp)
+        else
+            Assert.StartsWith(expected, $"%A{standing}")
+
+[<Theory>]
 [<InlineData("CHE-101.237.723")>]
 [<InlineData("CHE101237723")>]
 [<InlineData("che-101.237.723")>]
@@ -1156,6 +1202,46 @@ let ``a value that can't be a UID isn't sent`` (number: string) : Task =
         | Error(RegistryFailure.InvalidRequest _) -> Assert.Empty handler.Calls
         | other -> failwith $"%A{other}"
     }
+
+[<Theory>]
+[<InlineData("Zed\u000BBank")>]
+[<InlineData("Zed\u000CBank")>]
+[<InlineData("Zed\u001FBank")>]
+[<InlineData("Zed\uFFFFBank")>]
+let ``a search term XML can't carry is refused, not raised, and nothing is sent`` (name: string) : Task =
+    task {
+        use handler = nothingSent ()
+
+        match! (Sources.switzerland (connectionOver handler)).SearchAsync(name, ch, ct) with
+        | Error(RegistryFailure.InvalidRequest _) -> Assert.Empty handler.Calls
+        | other -> failwith $"%A{other}"
+
+        // Half a surrogate pair, which an attribute can't hold, so it is made here.
+        let half = String([| 'Z'; char 0xD83D; 'B' |])
+
+        match! (Sources.switzerland (connectionOver handler)).SearchAsync(half, ch, ct) with
+        | Error(RegistryFailure.InvalidRequest _) -> Assert.Empty handler.Calls
+        | other -> failwith $"%A{other}"
+    }
+
+[<Fact>]
+let ``an answer's text that is half a surrogate pair is an unreadable answer, not an exception`` () =
+    let reply: SourceReply =
+        {
+            Status = 200
+            Body = "{\"name\":\"ZED \\ud83d\"}"
+            At = DateTimeOffset.UnixEpoch
+            LastModified = ValueNone
+        }
+
+    match SourceAnswer.json reply (Json.tryString "name") with
+    | Error(RegistryFailure.UnreadableAnswer _) -> ()
+    | other -> failwith $"%A{other}"
+
+    // A value of another kind than the one read is an unreadable answer too.
+    match SourceAnswer.json reply (fun root -> root.GetProperty("name").GetInt32()) with
+    | Error(RegistryFailure.UnreadableAnswer _) -> ()
+    | other -> failwith $"%A{other}"
 
 [<Fact>]
 let ``a SOAP fault for a bad request is refused, and one for the request limit is rate limiting`` () : Task =

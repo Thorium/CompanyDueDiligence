@@ -67,6 +67,10 @@ type internal CompanyProfile =
         Branch: BranchParent voption
         /// external_registration_number.
         ExternalRegistrationNumber: string voption
+        /// partial_data_available, which says Companies House isn't the primary source of this company's data, and names who is.
+        PartialData: string voption
+        /// super_secure_managing_officer_count: managing officers of a registered overseas entity that no list shows.
+        SuperSecureManagingOfficers: int voption
         Raw: string
     }
 
@@ -450,4 +454,6 @@ type internal Page<'T> =
         Counts: ListCounts voption
         /// Each item as sent, compared by Paging to notice a repeated page or an item that moved.
         ItemsRaw: string list
+        /// filing_history_status, which only a filing history states.
+        Status: string voption
     }

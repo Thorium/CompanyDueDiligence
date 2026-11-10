@@ -189,7 +189,7 @@ module internal Peru =
         with
         | None -> BulkFile.fail "The zip holds no text file"
         | Some entry ->
-            match BulkFile.splitAt (fun _ -> true) (BulkFile.entryLines Encoding.Latin1 entry) with
+            match BulkFile.splitAt (fun _ -> true) (BulkFile.entryWholeLines '|' false Encoding.Latin1 entry) with
             | struct (_, ValueNone, _) -> BulkFile.fail "The text is empty"
             | struct (_, ValueSome header, lines) ->
                 if not (header.StartsWith("RUC|", StringComparison.Ordinal)) then

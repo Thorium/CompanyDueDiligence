@@ -495,10 +495,21 @@ type BulkService(folder: string, log: ILogger) =
                 |> List.map _.Label
 
             // A full path on this machine's own drives: a network share or device path would have the server, as its owner, reach elsewhere.
+            // Either separator, twice, opens a share's or a device's name, in the path as given and as the system resolves it.
             let local (path: string) =
-                Path.IsPathFullyQualified path
-                && not (path.StartsWith @"\\")
-                && not (path.StartsWith "//")
+                let isSeparator (c: char) = c = '/' || c = '\\'
+
+                let opensShare (text: string) =
+                    text.Length >= 2 && isSeparator text[0] && isSeparator text[1]
+
+                try
+                    Path.IsPathFullyQualified path
+                    && not (opensShare path)
+                    && not (opensShare (Path.GetFullPath path))
+                with
+                | :? ArgumentException
+                | :? NotSupportedException
+                | :? IOException -> false
 
             let notLocal =
                 paths |> Map.values |> Seq.concat |> Seq.filter (local >> not) |> List.ofSeq

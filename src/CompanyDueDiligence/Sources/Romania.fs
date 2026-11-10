@@ -95,8 +95,20 @@ module internal Romania =
         else
             ValueNone
 
+    [<Literal>]
+    let private CuiPrefix = "CUI "
+
     /// The key of a CUI no single firm holds.
-    let cuiKey (cui: string) = "CUI " + cui
+    let cuiKey (cui: string) = CuiPrefix + cui
+
+    /// Why a key the file doesn't hold can't be told absent: the file writes each firm's registration number in one of its two forms, and
+    /// neither is derived from the other here. A CUI has one form, so a CUI the file doesn't hold is not held.
+    let cantTellAbsent (key: string) =
+        if key.StartsWith(CuiPrefix, StringComparison.Ordinal) then
+            ValueNone
+        else
+            ValueSome
+                "The file writes a firm's registration number in one of two forms, such as J40/123/2020 or J2020000123400, and one isn't derived from the other here, so a number the file doesn't hold in this form can be held in the other: ask by CUI"
 
     /// A number's key without the file: a registration number as itself, a CUI as its cuiKey. An index maps the cuiKey of a CUI one firm
     /// holds to that firm's key.
@@ -781,5 +793,6 @@ module internal Romania =
                     "Unverified: those the ONRC beneficial owner register rules allow, such as obliged entities under anti-money-laundering rules"
                     "Apply to ONRC for beneficial owner data, or use a vendor"),
             repeatedCui,
-            cuis.Held |> Seq.map (fun pair -> struct (cuiKey pair.Key, pair.Value))
+            cuis.Held |> Seq.map (fun pair -> struct (cuiKey pair.Key, pair.Value)),
+            cantTellAbsent
         )

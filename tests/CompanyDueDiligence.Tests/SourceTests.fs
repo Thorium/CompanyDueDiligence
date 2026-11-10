@@ -110,6 +110,36 @@ let ``another company in Malta's answer isn't taken for the number asked`` () : 
     }
 
 [<Theory>]
+[<InlineData("C10")>]
+[<InlineData("C 10")>]
+[<InlineData("C-10")>]
+[<InlineData("c - 10")>]
+[<InlineData("C/10")>]
+[<InlineData("C.10")>]
+let ``a Malta number is asked for in the register's spelling, whatever separates its prefix`` (number: string) : Task =
+    task {
+        use handler = new FakeHandler(fun _ -> ok (fixture "malta-active.json"))
+        let! evidence = findIn (Sources.malta (connectionOver handler)) number mt
+        Assert.Equal("C 10", (companyOf evidence).Number)
+        Assert.Equal("/api/v1/companies/C%2010", handler.Calls.Head.Target)
+    }
+
+[<Theory>]
+[<InlineData("10")>]
+[<InlineData("C")>]
+[<InlineData("C -")>]
+[<InlineData("CAB")>]
+[<InlineData("")>]
+let ``a Malta number without a prefix and a number isn't sent`` (number: string) : Task =
+    task {
+        use handler = new FakeHandler(fun _ -> ok (fixture "malta-active.json"))
+
+        match! (Sources.malta (connectionOver handler)).TryFindAsync(number, mt, ct) with
+        | Error(RegistryFailure.InvalidRequest _) -> Assert.Empty handler.Calls
+        | other -> failwith $"%A{other}"
+    }
+
+[<Theory>]
 [<InlineData("Active", "Active")>]
 [<InlineData("In Process of Merging", "ActiveWithConcern")>]
 [<InlineData("In Process of Converting", "ActiveWithConcern")>]

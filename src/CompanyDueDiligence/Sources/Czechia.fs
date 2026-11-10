@@ -53,6 +53,13 @@ module internal Czechia =
         else
             ValueNone
 
+    /// "v likvidaci" as words of their own, whatever stands around them: a space, a comma, quotes, brackets or the name's start or end.
+    let private inLiquidation =
+        Regex(
+            @"(?<![\p{L}\p{N}])v\s+likvidaci(?![\p{L}\p{N}])",
+            RegexOptions.IgnoreCase ||| RegexOptions.CultureInvariant
+        )
+
     /// The StavZdroje code list. The public register's state decides; an entity not in it takes the economic subjects register's.
     /// A live entity whose name carries "v likvidaci" is being wound up, and one in the insolvency register has that against it.
     let standing
@@ -70,7 +77,7 @@ module internal Czechia =
                 | other -> other |> ValueOption.orElse publicRegister
 
         match state with
-        | ValueSome "AKTIVNI" when name.Contains(" v likvidaci", StringComparison.OrdinalIgnoreCase) ->
+        | ValueSome "AKTIVNI" when not (isNull name) && inLiquidation.IsMatch name ->
             CompanyStanding.WindingUp "v likvidaci (in liquidation)"
         | ValueSome "AKTIVNI" when insolvencyRegister = ValueSome "AKTIVNI" ->
             CompanyStanding.ActiveWithConcern "Listed in the insolvency register (ISIR)"

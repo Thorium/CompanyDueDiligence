@@ -155,6 +155,15 @@ let private companiesHouseWith (profile: string) (pscs: string list) (statements
 
 let private companiesHouse = companiesHouseWith profileJson
 
+/// Answers the company's profile with the one given, and any other call as respond does: a list is read against its profile.
+let private withProfileOf (profile: string) (respond: Call -> Answer) (call: Call) =
+    if Uri(call.Uri).AbsolutePath.EndsWith "/company/00000006" then
+        ok profile
+    else
+        respond call
+
+let private withProfile = withProfileOf profileJson
+
 let private registryOver (handler: FakeHandler) : ICompanyRegistry =
     CompaniesHouseRegistry(clientWith handler, fun () -> fixedTime)
 
@@ -742,16 +751,18 @@ let ``a verification block reaches the contract on officers and owners`` () : Ta
         let verified = ValueSome(DateOnly(2025, 12, 25))
 
         use officers =
-            new FakeHandler(fun call ->
-                ok (
-                    officersJson
-                        1
-                        0
-                        (if startIndexOf call = 0 then
-                             [ $$"""{"name":"A","officer_role":"director",{{block}}}""" ]
-                         else
-                             [])
-                ))
+            new FakeHandler(
+                withProfile (fun call ->
+                    ok (
+                        officersJson
+                            1
+                            0
+                            (if startIndexOf call = 0 then
+                                 [ $$"""{"name":"A","officer_role":"director",{{block}}}""" ]
+                             else
+                                 [])
+                    ))
+            )
 
         let! read = (registryOver officers).OfficersAsync("00000006", gb, ct)
 
@@ -774,7 +785,9 @@ let ``a corporate officer's registration reaches the contract`` () : Task =
             """{"name":"A FIRM LTD","officer_role":"corporate-director","identification":{"registration_number":"123","place_registered":"A Register"}}"""
 
         use handler =
-            new FakeHandler(fun call -> ok (officersJson 1 0 (if startIndexOf call = 0 then [ item ] else [])))
+            new FakeHandler(
+                withProfile (fun call -> ok (officersJson 1 0 (if startIndexOf call = 0 then [ item ] else [])))
+            )
 
         let! read = (registryOver handler).OfficersAsync("00000006", gb, ct)
 
@@ -1143,10 +1156,12 @@ let ``a long filing history reads the newest MostRead filings and says it stoppe
         let total = Api.FilingHistory.MostRead + 250
 
         use handler =
-            new FakeHandler(fun call ->
-                let start = startIndexOf call
-                let size = min 100 (total - start)
-                ok (listJson "total_count" total [ for n in start .. start + size - 1 -> filingItem n ]))
+            new FakeHandler(
+                withProfile (fun call ->
+                    let start = startIndexOf call
+                    let size = min 100 (total - start)
+                    ok (listJson "total_count" total [ for n in start .. start + size - 1 -> filingItem n ]))
+            )
 
         let registry =
             CompaniesHouseRegistry(clientWith handler, fun () -> fixedTime) :> IFilingRegister
@@ -1156,7 +1171,8 @@ let ``a long filing history reads the newest MostRead filings and says it stoppe
             Assert.Equal(Api.FilingHistory.MostRead, history.Filings.Length)
             Assert.Equal(ValueSome total, history.Total)
             Assert.False history.Complete
-            Assert.Equal(Api.FilingHistory.MostRead / Api.Paging.PageSize, handler.Calls.Length)
+            // The pages of the history, and the profile it is read against.
+            Assert.Equal(Api.FilingHistory.MostRead / Api.Paging.PageSize + 1, handler.Calls.Length)
         | other -> failwith $"%A{other}"
     }
 
@@ -1164,10 +1180,12 @@ let ``a long filing history reads the newest MostRead filings and says it stoppe
 let ``a short filing history is read whole and Complete`` () : Task =
     task {
         use handler =
-            new FakeHandler(fun call ->
-                match startIndexOf call with
-                | 0 -> ok (listJson "total_count" 2 [ filingItem 0; filingItem 1 ])
-                | _ -> ok (listJson "total_count" 2 []))
+            new FakeHandler(
+                withProfile (fun call ->
+                    match startIndexOf call with
+                    | 0 -> ok (listJson "total_count" 2 [ filingItem 0; filingItem 1 ])
+                    | _ -> ok (listJson "total_count" 2 []))
+            )
 
         let registry =
             CompaniesHouseRegistry(clientWith handler, fun () -> fixedTime) :> IFilingRegister
@@ -1177,4 +1195,204 @@ let ``a short filing history is read whole and Complete`` () : Task =
             Assert.Equal(2, history.Filings.Length)
             Assert.True history.Complete
         | other -> failwith $"%A{other}"
+    }
+
+// An officer's kind
+
+let private officersOf (profile: string) (items: string list) =
+    task {
+        use handler =
+            new FakeHandler(
+                withProfileOf profile (fun call ->
+                    ok (officersJson items.Length 0 (if startIndexOf call = 0 then items else [])))
+            )
+
+        let! read = (registryOver handler).OfficersAsync("00000006", gb, ct)
+        return (expectEvidence read).Value
+    }
+
+[<Theory>]
+[<InlineData("""{"name":"A LTD","officer_role":"corporate-director"}""", "LegalEntity")>]
+[<InlineData("""{"name":"A LTD","officer_role":"general-partner-in-a-limited-partnership","identification":{"registration_number":"123"}}""",
+             "LegalEntity")>]
+[<InlineData("""{"name":"A LTD","officer_role":"director","identification":{"place_registered":"A Register"}}""",
+             "LegalEntity")>]
+[<InlineData("""{"name":"A","officer_role":"director"}""", "Individual")>]
+[<InlineData("""{"name":"A","officer_role":"llp-member"}""", "Individual")>]
+[<InlineData("""{"name":"A","officer_role":"general-partner-in-a-limited-partnership","date_of_birth":{"month":3,"year":1970}}""",
+             "Individual")>]
+[<InlineData("""{"name":"A","officer_role":"general-partner-in-a-limited-partnership"}""", "Unknown")>]
+[<InlineData("""{"name":"A","officer_role":"limited-partner-in-a-limited-partnership"}""", "Unknown")>]
+[<InlineData("""{"name":"A","officer_role":"judicial-factor"}""", "Unknown")>]
+[<InlineData("""{"name":"A","officer_role":"a-new-role"}""", "Unknown")>]
+[<InlineData("""{"name":"A"}""", "Unknown")>]
+let ``an officer is a legal entity by its role or registration, a person by a role that says so, and otherwise unknown``
+    (item: string, expected: string)
+    : Task =
+    task {
+        match! officersOf profileJson [ item ] with
+        | Available [ officer ] -> Assert.StartsWith(expected, $"%A{officer.Kind}")
+        | other -> failwith $"%A{other}"
+    }
+
+// What a profile says keeps its lists from being whole
+
+/// The profile with one more field at its top level.
+let private profileWith (extra: string) =
+    let profile = profileJson.TrimEnd()
+    profile.Substring(0, profile.Length - 1) + "," + extra + "}"
+
+let private partialProfile =
+    profileWith "\"partial_data_available\":\"full-data-available-from-financial-conduct-authority\""
+
+[<Fact>]
+let ``an empty officer list of a company Companies House isn't the primary source for is not available`` () : Task =
+    task {
+        match! officersOf partialProfile [] with
+        | NotAvailable reason ->
+            Assert.Contains("partial_data_available", reason)
+            Assert.Contains("full-data-available-from-financial-conduct-authority", reason)
+        | other -> failwith $"%A{other}"
+    }
+
+[<Fact>]
+let ``officers of a company Companies House isn't the primary source for end with one not given`` () : Task =
+    task {
+        match! officersOf partialProfile [ """{"name":"DOE, Jane","officer_role":"director"}""" ] with
+        | Available [ listed; elsewhere ] ->
+            Assert.Equal("DOE, Jane", listed.Name)
+            Assert.True(PartyNames.isPlaceholder elsewhere.Name)
+            Assert.True elsewhere.Current
+
+            match elsewhere.Role with
+            | OfficerRole.Other words -> Assert.Contains("partial_data_available", words)
+            | other -> failwith $"%A{other}"
+        | other -> failwith $"%A{other}"
+    }
+
+[<Fact>]
+let ``each super secure managing officer the profile counts is an officer withheld`` () : Task =
+    task {
+        let profile = profileWith "\"super_secure_managing_officer_count\":2"
+
+        match! officersOf profile [ """{"name":"A LTD","officer_role":"corporate-managing-officer"}""" ] with
+        | Available [ listed; first; second ] ->
+            Assert.Equal(PartyKind.LegalEntity, listed.Kind)
+
+            for withheld in [ first; second ] do
+                Assert.Equal(PartyKind.Withheld, withheld.Kind)
+                Assert.True withheld.Current
+
+                match withheld.Role with
+                | OfficerRole.Other words -> Assert.Contains("super_secure_managing_officer_count", words)
+                | other -> failwith $"%A{other}"
+        | other -> failwith $"%A{other}"
+
+        // With no officer listed, the withheld ones are still there.
+        match! officersOf profile [] with
+        | Available [ first; second ] ->
+            Assert.Equal<PartyKind list>([ PartyKind.Withheld; PartyKind.Withheld ], [ first.Kind; second.Kind ])
+        | other -> failwith $"%A{other}"
+    }
+
+[<Fact>]
+let ``a profile without the markers leaves the officer list as it is`` () : Task =
+    task {
+        match!
+            officersOf
+                (profileWith "\"super_secure_managing_officer_count\":0")
+                [ """{"name":"A","officer_role":"director"}""" ]
+        with
+        | Available [ officer ] -> Assert.Equal("A", officer.Name)
+        | other -> failwith $"%A{other}"
+    }
+
+[<Fact>]
+let ``owners of a company Companies House isn't the primary source for carry a gap naming the marker`` () : Task =
+    task {
+        use handler = new FakeHandler(companiesHouseWith partialProfile [ pscJson ] [])
+        let! result = (registryOver handler).OwnersAsync("00000006", gb, purpose, ct)
+
+        match (expectEvidence result).Value with
+        | Available listing ->
+            Assert.False(OwnerListing.isComplete listing)
+
+            Assert.Contains(
+                listing.Gaps,
+                fun gap ->
+                    match gap with
+                    | OwnershipGap.StatementNotUnderstood words -> words.Contains "partial_data_available"
+                    | _ -> false
+            )
+        | other -> failwith $"%A{other}"
+
+        use whole = new FakeHandler(companiesHouse [ pscJson ] [])
+        let! result = (registryOver whole).OwnersAsync("00000006", gb, purpose, ct)
+
+        match (expectEvidence result).Value with
+        | Available listing ->
+            Assert.DoesNotContain(
+                listing.Gaps,
+                fun gap ->
+                    match gap with
+                    | OwnershipGap.StatementNotUnderstood words -> words.Contains "partial_data_available"
+                    | _ -> false
+            )
+        | other -> failwith $"%A{other}"
+    }
+
+[<Theory>]
+[<InlineData("", "", true)>]
+[<InlineData("", "filing-history-available", true)>]
+[<InlineData("", "filing-history-available-limited-partnership-from-2014", false)>]
+[<InlineData("", "something-new", false)>]
+[<InlineData("partial", "", false)>]
+[<InlineData("partial", "filing-history-available", false)>]
+let ``a filing history read to its end is Complete only when neither its status nor the profile says it isn't whole``
+    (profile: string, status: string, complete: bool)
+    : Task =
+    task {
+        let list (items: string list) =
+            let body = String.concat "," items
+
+            let stated =
+                if status = "" then
+                    ""
+                else
+                    $""","filing_history_status":"{status}" """
+
+            $"""{{"total_count":2,"items_per_page":{items.Length},"start_index":0,"items":[{body}]{stated}}}"""
+
+        use handler =
+            new FakeHandler(
+                withProfileOf (if profile = "" then profileJson else partialProfile) (fun call ->
+                    match startIndexOf call with
+                    | 0 -> ok (list [ filingItem 0; filingItem 1 ])
+                    | _ -> ok (list []))
+            )
+
+        let registry =
+            CompaniesHouseRegistry(clientWith handler, fun () -> fixedTime) :> IFilingRegister
+
+        match! registry.FilingsAsync("00000006", ct) with
+        | Ok { Value = Available history } ->
+            Assert.Equal(2, history.Filings.Length)
+            Assert.Equal(complete, history.Complete)
+        | other -> failwith $"%A{other}"
+    }
+
+[<Fact>]
+let ``a list read after the profile asks for no profile again`` () : Task =
+    task {
+        use handler = new FakeHandler(companiesHouse [] [])
+        let registry = registryOver handler
+        let! _ = registry.TryFindAsync("00000006", gb, ct)
+        let! _ = registry.OfficersAsync("00000006", gb, ct)
+
+        Assert.Equal(
+            1,
+            handler.Calls
+            |> List.filter (fun call -> Uri(call.Uri).AbsolutePath.EndsWith "/company/00000006")
+            |> List.length
+        )
     }

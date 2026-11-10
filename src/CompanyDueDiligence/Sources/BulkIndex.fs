@@ -222,6 +222,7 @@ type internal IndexedRegistry
     (
         manifest: BulkManifest,
         normal: string -> string voption,
+        cantTellAbsent: string -> string voption,
         records: SafeFileHandle,
         keys: SafeFileHandle,
         names: SafeFileHandle
@@ -344,7 +345,10 @@ type internal IndexedRegistry
                         match find key with
                         | { Find = index } when index >= 0 -> Ok(evidence ValueNone (NotAvailable(reason index)))
                         | { Record = offset } as entry when offset >= 0L -> Ok(read (ValueSome(recordOf entry)) entry)
-                        | entry -> Ok(read ValueNone entry)
+                        | entry ->
+                            match cantTellAbsent key with
+                            | ValueSome reason -> Ok(evidence ValueNone (NotAvailable reason))
+                            | ValueNone -> Ok(read ValueNone entry)
                     with error when damaged error ->
                         Error unreadable
                 ))
@@ -971,11 +975,12 @@ module internal BulkStore =
             | :? InvalidOperationException
             | Json.InvalidJson _ -> Error(RegistryFailure.UnreadableAnswer "The index's manifest can't be read")
 
-    /// Opens the index in directory, whose manifest is given, answering with normal as the register did. UnreadableAnswer when a file is
-    /// missing or isn't the size the manifest gives.
+    /// Opens the index in directory, whose manifest is given, answering with normal and cantTellAbsent as the register did. UnreadableAnswer
+    /// when a file is missing or isn't the size the manifest gives.
     let openWith
         (directory: string)
         (normal: string -> string voption)
+        (cantTellAbsent: string -> string voption)
         (manifest: BulkManifest)
         : Result<ICompanyRegistry, RegistryFailure> =
         let path name = Path.Combine(directory, name)
@@ -1024,7 +1029,7 @@ module internal BulkStore =
                     let records = handle RecordsFile
                     let keys = handle KeysFile
                     let names = handle NamesFile
-                    Ok(new IndexedRegistry(manifest, normal, records, keys, names) :> ICompanyRegistry)
+                    Ok(new IndexedRegistry(manifest, normal, cantTellAbsent, records, keys, names) :> ICompanyRegistry)
                 with
                 | :? IOException
                 | :? UnauthorizedAccessException ->

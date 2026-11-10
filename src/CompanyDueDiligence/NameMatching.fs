@@ -3,6 +3,7 @@ namespace CompanyDueDiligence
 open System
 open System.Globalization
 open System.Text
+open System.Text.RegularExpressions
 
 /// Names in a comparable form, and the fuzzy comparison. No dependency beyond the base library.
 module internal NameMatching =
@@ -71,29 +72,155 @@ module internal NameMatching =
 
         go 0 0 false
 
-    /// Upper case, accents off, full stops and apostrophes gone so that "P.L.C." reads as PLC, and anything else but letters and digits a space.
+    /// Upper-case Cyrillic letters as Latin, by BGN/PCGN for Russian without its rules of position: \u0415 is E everywhere, \u0401 is E, and the hard and
+    /// soft signs are dropped. The letters only Ukrainian has follow BGN/PCGN for Ukrainian. A letter the languages read differently is read as
+    /// Russian: \u0413 is G and \u0418 is I, where Ukrainian has H and Y; \u0429 is SHCH and \u042a is dropped, where Bulgarian has SHT and A.
+    let private cyrillic =
+        dict
+            [
+                '\u0410', "A"
+                '\u0411', "B"
+                '\u0412', "V"
+                '\u0413', "G"
+                '\u0490', "G"
+                '\u0414', "D"
+                '\u0415', "E"
+                '\u0401', "E"
+                '\u0404', "YE"
+                '\u0416', "ZH"
+                '\u0417', "Z"
+                '\u0418', "I"
+                '\u0406', "I"
+                '\u0407', "YI"
+                '\u0419', "Y"
+                '\u041a', "K"
+                '\u041b', "L"
+                '\u041c', "M"
+                '\u041d', "N"
+                '\u041e', "O"
+                '\u041f', "P"
+                '\u0420', "R"
+                '\u0421', "S"
+                '\u0422', "T"
+                '\u0423', "U"
+                '\u0424', "F"
+                '\u0425', "KH"
+                '\u0426', "TS"
+                '\u0427', "CH"
+                '\u0428', "SH"
+                '\u0429', "SHCH"
+                '\u042a', ""
+                '\u042b', "Y"
+                '\u042c', ""
+                '\u042d', "E"
+                '\u042e', "YU"
+                '\u042f', "YA"
+            ]
+
+    /// Upper-case Greek letters as Latin, by ELOT 743 (ISO 843's transcription), read after the accents are off.
+    let private greek =
+        dict
+            [
+                '\u0391', "A"
+                '\u0392', "V"
+                '\u0393', "G"
+                '\u0394', "D"
+                '\u0395', "E"
+                '\u0396', "Z"
+                '\u0397', "I"
+                '\u0398', "TH"
+                '\u0399', "I"
+                '\u039a', "K"
+                '\u039b', "L"
+                '\u039c', "M"
+                '\u039d', "N"
+                '\u039e', "X"
+                '\u039f', "O"
+                '\u03a0', "P"
+                '\u03a1', "R"
+                '\u03a3', "S"
+                '\u03a4', "T"
+                '\u03a5', "Y"
+                '\u03a6', "F"
+                '\u03a7', "CH"
+                '\u03a8', "PS"
+                '\u03a9', "O"
+            ]
+
+    /// ELOT 743's pairs: \u0391\u03a5, \u0395\u03a5 and \u0397\u03a5 end in F before a voiceless consonant or at a word's end and in V elsewhere, \u039f\u03a5 is OU, and \u0393 before \u0393, \u039e
+    /// or \u03a7 is N. With the accents off, a \u03a5 that carried a diaeresis reads as part of a pair.
+    let private greekPairs =
+        [
+            Regex(
+                @"([\u0391\u0395\u0397])\u03a5(?=[\u0398\u039a\u039e\u03a0\u03a3\u03a4\u03a6\u03a7\u03a8]|[^\u0391-\u03a9]|$)",
+                RegexOptions.Compiled
+            ),
+            "$1F"
+            Regex(@"([\u0391\u0395\u0397])\u03a5", RegexOptions.Compiled), "$1V"
+            Regex(@"\u039f\u03a5", RegexOptions.Compiled), "OU"
+            Regex(@"\u0393(?=[\u0393\u039e\u03a7])", RegexOptions.Compiled), "N"
+        ]
+
+    /// The text with each letter the table holds spelled as the table gives it.
+    let private spelled (table: Collections.Generic.IDictionary<char, string>) (text: string) =
+        if text |> Seq.exists table.ContainsKey then
+            (StringBuilder(text.Length * 2), text)
+            ||> Seq.fold (fun built c ->
+                match table.TryGetValue c with
+                | true, latin -> built.Append latin
+                | _ -> built.Append c)
+            |> string
+        else
+            text
+
+    let private greekAsLatin (text: string) =
+        if text |> Seq.exists greek.ContainsKey then
+            greekPairs
+            |> List.fold (fun (text: string) (pair, latin) -> pair.Replace(text, latin)) text
+            |> spelled greek
+        else
+            text
+
+    /// Upper case, accents off, Cyrillic and Greek letters spelled in Latin, full stops and apostrophes gone so that "P.L.C." reads as PLC, and
+    /// anything else but letters and digits a space. Letters of any other script stay as they are.
     let normalise (name: string) =
         if String.IsNullOrWhiteSpace name then
             ""
         elif Ascii.IsValid name then
             normaliseAscii name
         else
+            // Composed first, so that \u0419 and \u0407 are met as one letter each, before the accents come off.
             let upper =
                 transliterated
-                |> List.fold (fun (text: string) (from, into) -> text.Replace(from, into)) (name.ToUpperInvariant())
+                |> List.fold
+                    (fun (text: string) (from, into) -> text.Replace(from, into))
+                    (name.ToUpperInvariant().Normalize NormalizationForm.FormC)
+                |> spelled cyrillic
 
-            let plain =
+            let bare =
                 upper.Normalize NormalizationForm.FormD
                 |> Seq.filter (fun c ->
                     CharUnicodeInfo.GetUnicodeCategory c <> UnicodeCategory.NonSpacingMark
                     && c <> '.'
                     && c <> '\''
                     && c <> '\u2019')
-                |> Seq.map (fun c -> if Char.IsLetterOrDigit c then c else ' ')
                 |> Seq.toArray
                 |> String
 
+            let plain =
+                greekAsLatin bare
+                |> String.map (fun c -> if Char.IsLetterOrDigit c then c else ' ')
+
             String.Join(' ', plain.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+
+    /// Latin letters, with their extended blocks.
+    let private isLatin (c: char) =
+        c <= '\u024f' || (c >= '\u1e00' && c <= '\u1eff')
+
+    /// True when the name, after normalise, still holds a letter of a script normalise doesn't spell in Latin, such as Hebrew, Arabic or
+    /// Chinese. Such a name can't be compared with a list's Latin names.
+    let holdsOtherScript (name: string) =
+        normalise name |> Seq.exists (fun c -> Char.IsLetter c && not (isLatin c))
 
     /// Legal forms, whose presence says nothing about whether two names are one party.
     let private legalForms =
@@ -129,7 +256,12 @@ module internal NameMatching =
                 "ZAO"
                 "OAO"
                 "PAO"
+                "AO"
+                "NAO"
                 "JSC"
+                "PJSC"
+                "OJSC"
+                "CJSC"
                 "FZE"
                 "FZCO"
                 "FZC"
@@ -336,6 +468,12 @@ module internal NameMatching =
     let internal saysLittleAlone (word: string) =
         genericWords.Contains word || plainBusinessWords.Contains word
 
+    /// Whether one word can carry a match by being in both names: long enough, not a plain business word, and not common in the lists at hand.
+    let private raisedAlone (isCommon: string -> bool) (word: string) =
+        word.Length >= ShortestLoneWord
+        && not (saysLittleAlone word)
+        && not (isCommon word)
+
     /// Spellings whose lengths differ by more than this share can't reach the threshold, so aren't scored.
     let private tooDifferentInLength (first: string) (second: string) =
         float (abs (first.Length - second.Length)) > 0.35 * float (max first.Length second.Length)
@@ -364,26 +502,37 @@ module internal NameMatching =
                 | [], _
                 | _, [] -> ValueNone
                 | [ single ], [ other ] ->
-                    if single.Length < 6 || tooDifferentInLength single other then
-                        ValueNone
-                    else
-                        let score = similarity single other
-
-                        if score >= OneWordThreshold then
-                            ValueSome(
-                                Math.Round(score, 3),
-                                $"Similar spelling of one distinctive word: Jaro-Winkler {score:F3}"
-                            )
-                        else
+                    // Words of six letters or more are scored for spelling; a shorter word counts only when it is the same word.
+                    let similar =
+                        if single.Length < 6 || tooDifferentInLength single other then
                             ValueNone
+                        else
+                            let score = similarity single other
+
+                            if score >= OneWordThreshold then
+                                ValueSome(
+                                    Math.Round(score, 3),
+                                    $"Similar spelling of one distinctive word: Jaro-Winkler {score:F3}"
+                                )
+                            else
+                                ValueNone
+
+                    match similar with
+                    | ValueNone when single = other && raisedAlone isCommon single ->
+                        ValueSome(0.85, "The one distinctive word of each name is the same")
+                    | found -> found
                 | [ single ], _ when
                     ours.Words = [ single ]
-                    && single.Length >= ShortestLoneWord
                     && theirs.WordSet.Contains single
-                    && not (saysLittleAlone single)
-                    && not (isCommon single)
+                    && raisedAlone isCommon single
                     ->
                     ValueSome(0.85, "The one word of the screened name is in the listed name")
+                | _, [ single ] when
+                    theirs.Words = [ single ]
+                    && ours.WordSet.Contains single
+                    && raisedAlone isCommon single
+                    ->
+                    ValueSome(0.85, "The one word of the listed name is in the screened name")
                 | first, second ->
                     let oursText, theirsText = String.concat " " first, String.concat " " second
 
@@ -400,7 +549,8 @@ module internal NameMatching =
                         else
                             ValueNone
 
-    /// Whether two names resemble each other, with the score and the reason. A screened name of one distinctive word counts when the listed name holds that
-    /// word or nearly that word. A screening also holds back a word common in its lists: see CommonWordEntries.
+    /// Whether two names resemble each other, with the score and the reason. A name of one word, screened or listed, counts when the other name
+    /// holds that word, and so do two names whose one distinctive word is the same or nearly the same. A screening also holds back a word common
+    /// in its lists: see CommonWordEntries.
     let compare (screened: string) (listed: string) =
         comparePrepared (fun _ -> false) (prepare screened) (prepare listed)
