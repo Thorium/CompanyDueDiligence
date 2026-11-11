@@ -432,16 +432,16 @@ type BulkService(folder: string, log: ILogger) =
             SavedBytes =
                 match cache with
                 | BulkCacheState.Downloaded(_, bytes, _) -> Nullable bytes
-                | _ -> Nullable()
+                | BulkCacheState.NotDownloaded | BulkCacheState.ByHand -> Nullable()
             IndexBytes = toNullable built
             DownloadedAt =
                 match cache with
                 | BulkCacheState.Downloaded(at, _, _) -> at.ToString("o", Globalization.CultureInfo.InvariantCulture)
-                | _ -> null
+                | BulkCacheState.NotDownloaded | BulkCacheState.ByHand -> null
             Stale =
                 match cache with
                 | BulkCacheState.Downloaded(_, _, stale) -> stale
-                | _ -> false
+                | BulkCacheState.NotDownloaded | BulkCacheState.ByHand -> false
             Error = error
         }
 

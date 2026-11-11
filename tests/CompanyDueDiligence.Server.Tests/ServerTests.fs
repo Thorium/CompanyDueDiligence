@@ -165,7 +165,7 @@ let ``a bulk file on a network share or a relative path is refused`` () : Task =
             [
                 for first in [ "/"; "\\" ] do
                     for second in [ "/"; "\\" ] do
-                        first + second + "other/share/company.xlsx"
+                        $"{first}{second}other/share/company.xlsx"
 
                 String.Join("\\", [ ""; ""; "?"; "C:"; "company.xlsx" ])
                 "company.xlsx"
@@ -275,7 +275,7 @@ let ``a resolved source built from a file already here is listed, searched, and 
         use server = new LocalServer()
         let file = Path.Combine(server.Data, "opsiprs.csv")
 
-        File.WriteAllText(
+        do! File.WriteAllTextAsync(
             file,
             "Matična številka;Davčna številka;Naziv;Pravno organizacijska oblika;Ulica;Hišna številka;Dodatek k hišni številki;Naselje;Poštna številka;Poštni kraj\n"
             + "1234567000;12345678;PRIMER PODJETJE d.o.o.;Družba z omejeno odgovornostjo;Slovenska cesta;10;A;Ljubljana;1000;Ljubljana\n"
@@ -319,8 +319,8 @@ let ``the bulk listing offers Download for resolved sources, with their listing 
         use server = new LocalServer()
         let! states = getJson<BulkDto array> server "/api/bulk"
 
-        let byId id =
-            states |> Array.find (fun item -> item.Id = id)
+        let byId pid =
+            states |> Array.find (fun item -> item.Id = pid)
 
         for id in [ "AR-C"; "AU-ASIC"; "BR"; "CL-RES"; "CY"; "RO"; "RU-SME"; "SI"; "UA" ] do
             let item = byId id
@@ -335,8 +335,8 @@ let ``the bulk listing offers Download for resolved sources, with their listing 
         let asic = byId "AU-ASIC"
         Assert.Equal("data.gov.au, CKAN API: asic-companies", asic.Portal)
 
-        for id in [ "BE"; "MD"; "US-FL" ] do
-            let item = byId id
+        for pid in [ "BE"; "MD"; "US-FL" ] do
+            let item = byId pid
             Assert.Equal("by-hand", item.Delivery)
             Assert.Null item.Portal
             Assert.False(item.Bytes.HasValue)

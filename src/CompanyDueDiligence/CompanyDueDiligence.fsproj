@@ -5,7 +5,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <RootNamespace>CompanyDueDiligence</RootNamespace>
     <PackageId>CompanyDueDiligence</PackageId>
-    <Version>1.0.1</Version>
+    <Version>1.0.2</Version>
     <Authors>Tuomas Hietanen</Authors>
     <PackageLicenseExpression>Unlicense</PackageLicenseExpression>
     <Description>A company due diligence case file for a compliance team: connects register records, filings, LEI data, sanctions list screening and vendor checks, with their links, flags and gaps, for an officer to decide. It decides nothing and never says clear. Reads 58 company registers in Europe, the Americas, Asia, Africa and Oceania, by API or from files the host downloads, and GLEIF. Unofficial; not affiliated with any of them.</Description>
@@ -15,7 +15,15 @@
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>icon.png</PackageIcon>
-    <PackageReleaseNotes>v1.0.1:
+    <PackageReleaseNotes>v1.0.2:
+- FIXED: AO and NAO are also names of people: a name holding one is compared both as a legal form and as a word, so "Nao Tanaka" and "Ao Hua" meet their listed spellings again; a name of nothing else is screened
+- FIXED: a listed name of one word inside a screened name keeps the Jaro-Winkler score of the whole names where that raises it (0.94 for "Rosneft UK"), not 0.85
+- FIXED: StartsWith and Contains find a part of a Greek name asked in Greek that ends or starts inside a pair (Αυ for Αύρα, Αγ for Άγγελος)
+- FIXED: NUL padding or a Ctrl-Z after a delimited file's last record no longer reads as a record cut short
+- FIXED: a Latin name with a modifier letter (Oʻzbekiston), a ligature or a full-width letter counts as screened, not as holding another script
+- CHANGED: a delimited file's lines are read in one pass: about 1.2 times 1.0.0's reading time, where 1.0.1 took 1.5
+
+v1.0.1:
 - FIXED: a screening raises two names whose one distinctive word is the same, whatever its length, and a listed name of one word inside a longer screened name; PJSC, OJSC, CJSC, AO and NAO are legal forms
 - CHANGED: NameMatch.normalise spells Cyrillic (BGN/PCGN) and Greek (ELOT 743) letters in Latin, for screening and name search; a screened name holding another script is in NamesNotScreened, not NamesScreened
 - FIXED: Romania: a registration number the file doesn't hold in the form asked is NotAvailable, not "not held", as the file writes a number in one of two forms; a CUI it lacks is still not held

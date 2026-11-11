@@ -47,6 +47,19 @@ let ``StartsWith and Contains compare normalised names as text`` () =
     Assert.False(NameMatch.matcher NameMatch.Contains "groupinc" "Degrees Group, Inc.")
 
 [<Fact>]
+let ``a part of a Greek name asked in Greek matches whatever letters stand around the part`` () =
+    // Αυ alone is AF and Αγ alone is AG, where the whole names are AVRA and ANGELOS.
+    Assert.True(NameMatch.matcher NameMatch.StartsWith "Αυ" "Αύρα Ζεδ ΕΠΕ")
+    Assert.True(NameMatch.matcher NameMatch.StartsWith "Αγ" "Άγγελος Ζεδ")
+    Assert.True(NameMatch.matcher NameMatch.Contains "ύρα" "Αύρα Ζεδ ΕΠΕ")
+    Assert.True(NameMatch.matcher NameMatch.Contains "γελος ζ" "Άγγελος Ζεδ")
+    Assert.True(NameMatch.matcher NameMatch.StartsWith "Avra" "Αύρα Ζεδ ΕΠΕ")
+    Assert.True(NameMatch.matcher NameMatch.Exact "Αύρα Ζεδ" "AVRA ZED")
+    Assert.False(NameMatch.matcher NameMatch.StartsWith "Αρ" "Αύρα Ζεδ ΕΠΕ")
+    Assert.False(NameMatch.matcher NameMatch.Contains "ρυα" "Αύρα Ζεδ ΕΠΕ")
+    Assert.False(NameMatch.matcher NameMatch.StartsWith "Αυ" "AYRA ZED")
+
+[<Fact>]
 let ``a name with no letter or digit matches nothing`` () =
     for matching in modes do
         Assert.False(NameMatch.matcher matching "&&&" "&&&")

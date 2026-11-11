@@ -51,8 +51,8 @@ let private codesOf (context: HttpContext) =
     queryOf context "codes"
     |> ValueOption.map (fun text ->
         text.Split(',', StringSplitOptions.RemoveEmptyEntries ||| StringSplitOptions.TrimEntries)
-        |> List.ofArray
-        |> List.distinct)
+        |> Array.distinct
+        |> List.ofArray)
 
 let private routeOf (context: HttpContext) (name: string) =
     string context.Request.RouteValues[name]
@@ -236,20 +236,22 @@ let map
                         | :? Text.Json.JsonException -> return ValueNone
                     }
 
-                match body |> ValueOption.bind ValueOption.ofObj |> ValueOption.map _.Trim() with
-                | ValueSome value when value <> "" ->
-                    keys.Save(name, value)
-                    return ok (available.Keys() |> Array.ofList)
-                | _ -> return failure 400 "Send the key as JSON: { \"value\": \"…\" }"
+                return
+                    match body |> ValueOption.bind ValueOption.ofObj |> ValueOption.map _.Trim() with
+                    | ValueSome value when value <> "" ->
+                        keys.Save(name, value)
+                        ok (available.Keys() |> Array.ofList)
+                    | _ -> failure 400 "Send the key as JSON: { \"value\": \"…\" }"
         }
 
     let removeKey (context: HttpContext) =
         task {
-            match settingOf context with
-            | ValueNone -> return failure 404 "No keyed register reads that setting"
-            | ValueSome name ->
-                keys.Remove name
-                return ok (available.Keys() |> Array.ofList)
+            return
+                match settingOf context with
+                | ValueNone -> failure 404 "No keyed register reads that setting"
+                | ValueSome name ->
+                    keys.Remove name
+                    ok (available.Keys() |> Array.ofList)
         }
 
     let bulkStates () = bulk.States() |> Array.ofList
@@ -267,7 +269,7 @@ let map
         | ValueNone -> Task.FromResult(failure 404 $"No bulk source has the id {id}")
 
     let addFiles (context: HttpContext) =
-        known context (fun id ->
+        known context (fun pid ->
             task {
                 let! body =
                     task {
@@ -282,17 +284,18 @@ let map
                         | :? Text.Json.JsonException -> return ValueNone
                     }
 
-                match body with
-                | ValueNone -> return failure 400 "Send the files as JSON: { \"paths\": { \"<slot>\": [\"<path>\"] } }"
-                | ValueSome paths ->
-                    let bySlot =
-                        paths
-                        |> Seq.map (fun pair -> pair.Key, (if isNull pair.Value then [] else List.ofArray pair.Value))
-                        |> Map.ofSeq
+                return
+                    match body with
+                    | ValueNone -> failure 400 "Send the files as JSON: { \"paths\": { \"<slot>\": [\"<path>\"] } }"
+                    | ValueSome paths ->
+                        let bySlot =
+                            paths
+                            |> Seq.map (fun pair -> pair.Key, (if isNull pair.Value then [] else List.ofArray pair.Value))
+                            |> Map.ofSeq
 
-                    match bulk.StartBuild(id, bySlot) with
-                    | Ok() -> return accepted (bulkStates ())
-                    | Error message -> return failure 400 message
+                        match bulk.StartBuild(pid, bySlot) with
+                        | Ok() -> accepted (bulkStates ())
+                        | Error message -> failure 400 message
             })
 
     let get (pattern: string) work =
@@ -323,9 +326,9 @@ let map
     app.MapDelete(
         "/api/bulk/{id}",
         reply (fun context ->
-            known context (fun id ->
+            known context (fun pid ->
                 task {
-                    match! bulk.Remove id with
+                    match! bulk.Remove pid with
                     | Ok() -> return ok (bulkStates ())
                     | Error message -> return failure 409 message
                 }))

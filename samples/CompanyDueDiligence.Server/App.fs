@@ -173,7 +173,7 @@ let create (args: string array) (configure: WebApplicationBuilder -> unit) =
     let app = builder.Build()
 
     let protector =
-        app.Services.GetRequiredService<IDataProtectionProvider>().CreateProtector("CompanyDueDiligence.Keys")
+        app.Services.GetRequiredService<IDataProtectionProvider>().CreateProtector "CompanyDueDiligence.Keys"
 
     let keys = KeyStore(Path.Combine(data, "keys.json"), protector)
     let bulk = new BulkService(Path.Combine(data, "bulk"), app.Logger)

@@ -605,6 +605,38 @@ let ``the same distinctive word is raised whatever its length and the generic wo
 let ``a joint-stock form is a legal form`` (screened: string) =
     Assert.Equal(ValueSome 1., NameMatching.compare screened "Zedal" |> ValueOption.map fst)
 
+[<Theory>]
+[<InlineData("Nao Tanaka", "NAO TAKANA")>]
+[<InlineData("Ao Hua", "AO HWA")>]
+[<InlineData("Tanaka Nao", "Takana Nao")>]
+[<InlineData("AO Quilby Works", "NAO Quillby Works")>]
+let ``a legal form that is also a name is compared both as a form and as a word`` (screened: string, listed: string) =
+    match NameMatching.compare screened listed with
+    | ValueSome(score, reason) ->
+        Assert.True(score >= NameMatching.SpellingThreshold, $"{score}")
+        Assert.Contains("Similar spelling", reason)
+    | ValueNone -> failwith "No match"
+
+[<Fact>]
+let ``a name of nothing but a form that is also a name is read as a name`` () =
+    Assert.Equal<string list>([ "NAO" ], NameMatching.tokens "Nao")
+    Assert.Equal<string list>([ "AO" ], NameMatching.tokens "Dr Ao Ltd")
+    Assert.Equal<string list>([ "ZEDAL" ], NameMatching.tokens "NAO Zedal")
+    Assert.Equal<string list>([ "NAO"; "ZEDAL" ], NameMatching.wordsOf (NameMatching.prepare "Zedal NAO Ltd") |> List.sort)
+    Assert.Empty(NameMatching.tokens "Ltd")
+
+[<Fact>]
+let ``a listed name of one word keeps the score of the whole names' spelling where they are close`` () =
+    match NameMatching.compare "Quillby UK" "Quillby" with
+    | ValueSome(score, reason) ->
+        Assert.True(score > 0.9, $"{score}")
+        Assert.Contains("Similar spelling", reason)
+    | ValueNone -> failwith "No match"
+
+[<Theory; InlineData("Oʻzbekiston Zedtorg"); InlineData("Zedland ﬁnance"); InlineData("Ｚedland Works")>]
+let ``a Latin name with a modifier letter, a ligature or a full-width letter holds no other script`` (name: string) =
+    Assert.False(NameMatching.holdsOtherScript name)
+
 /// A list where every entry holds the words a screening must not flood on, in the shape of the real lists.
 let private crowded (entries: int) (words: string list) : Result<LoadedList, UnreadableList> =
     Ok
@@ -703,9 +735,7 @@ let ``Cyrillic and Greek letters are spelled in Latin`` (name: string, expected:
     Assert.Equal(expected, NameMatching.normalise name)
     Assert.False(NameMatching.holdsOtherScript name)
 
-[<Theory>]
-[<InlineData("ООО «Зедланд Мининг»")>]
-[<InlineData("Ζεδλανδ Μινινγ")>]
+[<Theory; InlineData("ООО «Зедланд Мининг»"); InlineData("Ζεδλανδ Μινινγ")>]
 let ``a Cyrillic or Greek name is screened in Latin letters`` (name: string) =
     let result = SanctionsScreening.screen allLists [ company name ] [] at
     Assert.Equal<string list>([ name ], result.NamesScreened)

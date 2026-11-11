@@ -807,7 +807,7 @@ module SanctionsScreening =
                 entries
                 |> Seq.collect (fun (_, entryNames) ->
                     entryNames
-                    |> Seq.collect (fun (_, held) -> held.Words)
+                    |> Seq.collect (fun (_, held) -> NameMatching.wordsOf held)
                     |> Seq.filter screenedWords.Contains
                     |> Seq.distinct))
             |> Seq.countBy id

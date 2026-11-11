@@ -632,10 +632,7 @@ let ``a CUI missing from Romania's file is not held`` () : Task =
     }
 
 // The file holds J2019003266407 and J40/1116/1991, each in one form only.
-[<Theory>]
-[<InlineData("J40/99999/2020")>]
-[<InlineData("J40/3266/2019")>]
-[<InlineData("J1991001116400")>]
+[<Theory; InlineData("J40/99999/2020"); InlineData("J40/3266/2019"); InlineData("J1991001116400")>]
 let ``a Romanian registration number the file doesn't hold in that form can't be told absent`` (number: string) : Task =
     task {
         let! registry = romania ()
@@ -1281,3 +1278,22 @@ let ``a delimited text is cut short only when its last record is short and has n
         | Ok records -> failwith $"%A{records}"
     else
         read () |> ignore
+
+[<Fact>]
+let ``padding after the last record isn't a record cut short, and a short record before it is`` () =
+    let read (text: string) =
+        try
+            BulkFile.wholeLines ',' true BulkFile.strictUtf8 (textStream text)
+            |> BulkFile.records ',' true
+            |> Seq.filter (fun record -> record.Fields.Length > 1)
+            |> Seq.length
+            |> Ok
+        with BulkFile.UnreadableFile reason ->
+            Error reason
+
+    for padding in [ "\u001a"; "\u0000\u0000\u0000"; " \u0000\u001a" ] do
+        Assert.Equal(Ok 2, read ("a,b,c\r\n1,2,3\r\n" + padding))
+
+        match read ("a,b,c\r\n1,2,3\r\n4,5" + padding) with
+        | Error reason -> Assert.Contains("cut short", reason)
+        | Ok records -> failwith $"{records} records"

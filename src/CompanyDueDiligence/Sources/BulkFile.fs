@@ -411,56 +411,58 @@ module internal BulkFile =
             use ending = new EndingStream(stream)
             use reader = new StreamReader(ending, encoding, true, 65536, true)
 
-            // Each line with the one after it, so the last is known as it is given, when the stream has been read to its end.
-            yield!
-                Seq.initInfinite (fun _ -> reader.ReadLine())
-                |> Seq.takeWhile (isNull >> not)
-                |> Seq.map ValueSome
-                |> fun read -> Seq.append read (Seq.singleton ValueNone)
-                |> Seq.pairwise
-                |> Seq.choose (fun (line, next) ->
-                    match line, next with
-                    | ValueSome text, ValueSome _ -> Some { Text = text; Unended = false }
-                    | ValueSome text, ValueNone ->
-                        Some
-                            {
-                                Text = text
-                                Unended = ending.EndsWithoutLineEnd
-                            }
-                    | ValueNone, _ -> None)
+            // Each line is given once the one after it has been asked for, so the last is known as it is given. A loop, as a bulk file is
+            // read line by line through here.
+            let mutable line = reader.ReadLine()
+
+            while not (isNull line) do
+                let next = reader.ReadLine()
+
+                yield
+                    {
+                        Text = line
+                        Unended = isNull next && ending.EndsWithoutLineEnd
+                    }
+
+                line <- next
         }
+
+    /// True for a line of nothing but white space, NUL padding or the Ctrl-Z that ends an old DOS text: it is not a record.
+    let private isPadding (line: string) =
+        line
+        |> String.forall (fun c -> Char.IsWhiteSpace c || c = '\u001a' || c = '\u0000')
 
     /// The lines' text, failing the file when it ends without a line end in a record with fewer fields than columns, or than its first
     /// record when columns is ValueNone. Such a file is cut short, and the fields its last record lacks would read as absent. A record with
-    /// fewer fields anywhere else, or before a line end, is read as the file gives it.
+    /// fewer fields anywhere else, or before a line end, is read as the file gives it, and so is padding after the last record.
     let whole (columns: int voption) (delimiter: char) (quoting: bool) (lines: TextLine seq) : string seq =
-        // The field count to expect, and the lines so far of a record whose quoted field is still open, last first.
-        lines
-        |> Seq.scan
-            (fun (struct (expected: int voption, opened: string list, _)) line ->
-                let record = line.Text :: opened
+        seq {
+            // The field count to expect, and the lines so far of a record whose quoted field is still open, last first.
+            let mutable expected = columns
+            let mutable opened: string list = []
 
+            for line in lines do
                 let stillOpen = quoting && openAfter delimiter (not opened.IsEmpty) line.Text
 
-                let fields () =
-                    (split delimiter quoting (String.Join("\n", List.rev record))).Length
+                // Fields are counted only where the count is used: in the first record, and in a last one without its line end.
+                if
+                    not stillOpen
+                    && (expected.IsNone || line.Unended)
+                    && not (opened.IsEmpty && isPadding line.Text)
+                then
+                    let fields =
+                        (split delimiter quoting (String.Join("\n", List.rev (line.Text :: opened)))).Length
 
-                let blank = opened.IsEmpty && String.IsNullOrWhiteSpace line.Text
-
-                let expected =
                     match expected with
-                    | ValueNone when not stillOpen && not blank -> ValueSome(fields ())
-                    | known -> known
+                    | ValueNone -> expected <- ValueSome fields
+                    | ValueSome needed when line.Unended && fields < needed ->
+                        fail
+                            "The file ends without a line end, in a record with fewer fields than the others: it is cut short"
+                    | ValueSome _ -> ()
 
-                match expected with
-                | ValueSome needed when line.Unended && not stillOpen && not blank && fields () < needed ->
-                    fail
-                        "The file ends without a line end, in a record with fewer fields than the others: it is cut short"
-                | _ -> ()
-
-                struct (expected, (if stillOpen then record else []), ValueSome line.Text))
-            (struct (columns, [], ValueNone))
-        |> Seq.choose (fun (struct (_, _, text)) -> ValueOption.toOption text)
+                opened <- if stillOpen then line.Text :: opened else []
+                yield line.Text
+        }
 
     /// The lines of a delimited text stream whose first record is its header or is as wide as the rest, failing a file cut short as whole
     /// does. The stream is left open.

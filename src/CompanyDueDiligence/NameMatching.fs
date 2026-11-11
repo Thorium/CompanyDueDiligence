@@ -181,9 +181,8 @@ module internal NameMatching =
         else
             text
 
-    /// Upper case, accents off, Cyrillic and Greek letters spelled in Latin, full stops and apostrophes gone so that "P.L.C." reads as PLC, and
-    /// anything else but letters and digits a space. Letters of any other script stay as they are.
-    let normalise (name: string) =
+    /// normalise, with Greek spelled by its pairs or letter by letter.
+    let private normaliseWith (greekAsLatin: string -> string) (name: string) =
         if String.IsNullOrWhiteSpace name then
             ""
         elif Ascii.IsValid name then
@@ -213,9 +212,30 @@ module internal NameMatching =
 
             String.Join(' ', plain.Split(' ', StringSplitOptions.RemoveEmptyEntries))
 
-    /// Latin letters, with their extended blocks.
+    /// Upper case, accents off, Cyrillic and Greek letters spelled in Latin, full stops and apostrophes gone so that "P.L.C." reads as PLC, and
+    /// anything else but letters and digits a space. Letters of any other script stay as they are.
+    let normalise (name: string) = normaliseWith greekAsLatin name
+
+    /// normalise with each Greek letter spelled on its own, whatever stands beside it. A part of a Greek name is a part of the whole name in
+    /// this spelling, which the pairs don't keep: \u0391\u03a5 alone is AF, and AV in \u0391\u03a5\u03a1\u0391.
+    let normaliseByLetter (name: string) = normaliseWith (spelled greek) name
+
+    /// True when the text holds a Greek letter.
+    let holdsGreek (text: string) =
+        not (isNull text)
+        && text
+           |> Seq.exists (fun c -> (c >= '\u0370' && c <= '\u03ff') || (c >= '\u1f00' && c <= '\u1fff'))
+
+    /// Latin letters: the Latin blocks with their extensions, the modifier letters Latin spellings use (O\u02bbzbekiston), ligatures and
+    /// full-width forms.
     let private isLatin (c: char) =
-        c <= '\u024f' || (c >= '\u1e00' && c <= '\u1eff')
+        c <= '\u02ff'
+        || (c >= '\u1e00' && c <= '\u1eff')
+        || (c >= '\u2c60' && c <= '\u2c7f')
+        || (c >= '\ua720' && c <= '\ua7ff')
+        || (c >= '\uab30' && c <= '\uab6f')
+        || (c >= '\ufb00' && c <= '\ufb06')
+        || (c >= '\uff21' && c <= '\uff5a')
 
     /// True when the name, after normalise, still holds a letter of a script normalise doesn't spell in Latin, such as Hebrew, Arabic or
     /// Chinese. Such a name can't be compared with a list's Latin names.
@@ -271,6 +291,9 @@ module internal NameMatching =
                 "PTE"
                 "PTY"
             ]
+
+    /// Legal forms that are also names of people (Ao, Nao). A name holding one is compared both without it and with it: see Prepared.Named.
+    let private formsAlsoNames = set [ "AO"; "NAO" ]
 
     /// Words that don't tell one company from another.
     let private genericWords =
@@ -332,11 +355,30 @@ module internal NameMatching =
 
         if trimmed.IsEmpty then words else trimmed
 
+    /// The name's words without its legal forms and titles, and, where it holds a form that is also a name, its words with that form kept.
+    /// A name of nothing else but legal forms and titles ("Nao", "Dr Ao") is read with them.
+    let private readings (name: string) =
+        let words = (normalise name).Split(' ', StringSplitOptions.RemoveEmptyEntries)
+
+        let without (isForm: string -> bool) =
+            words |> Array.filter (isForm >> not) |> List.ofArray |> withoutTitles
+
+        let plain = without legalForms.Contains
+
+        if words |> Array.exists formsAlsoNames.Contains then
+            let named =
+                without (fun word -> legalForms.Contains word && not (formsAlsoNames.Contains word))
+
+            if plain |> List.forall titles.Contains then
+                struct (named, ValueNone)
+            else
+                struct (plain, ValueSome named)
+        else
+            struct (plain, ValueNone)
+
     let tokens (name: string) =
-        (normalise name).Split(' ', StringSplitOptions.RemoveEmptyEntries)
-        |> Array.filter (fun token -> not (legalForms.Contains token))
-        |> List.ofArray
-        |> withoutTitles
+        let struct (words, _) = readings name
+        words
 
     /// Jaro similarity. Written with loops because a screening runs it millions of times.
     let private jaro (first: string) (second: string) =
@@ -449,17 +491,29 @@ module internal NameMatching =
             Sorted: string
             /// The words that tell one party from another, sorted: the spelling comparison reads these, so that "Trading" can't carry a match.
             Distinctive: string list
+            /// The name with a legal form that is also a name kept as a word ("NAO TANAKA"), where it holds one. Two names are compared in
+            /// both readings and the better one counts.
+            Named: Prepared voption
         }
 
-    let internal prepare (name: string) =
-        let words = tokens name
-
+    let private preparedOf (named: Prepared voption) (words: string list) =
         {
             Words = words
             WordSet = Set.ofList words
             Sorted = words |> List.sort |> String.concat " "
             Distinctive = words |> List.filter (fun word -> not (genericWords.Contains word)) |> List.sort
+            Named = named
         }
+
+    let internal prepare (name: string) =
+        let struct (words, named) = readings name
+        preparedOf (named |> ValueOption.map (preparedOf ValueNone)) words
+
+    /// Every word of the name, in either reading.
+    let internal wordsOf (name: Prepared) =
+        match name.Named with
+        | ValueSome named -> List.distinct (name.Words @ named.Words)
+        | ValueNone -> name.Words
 
     let private hasDistinctiveWord (words: string list) =
         words |> List.exists (fun word -> not (genericWords.Contains word))
@@ -478,8 +532,8 @@ module internal NameMatching =
     let private tooDifferentInLength (first: string) (second: string) =
         float (abs (first.Length - second.Length)) > 0.35 * float (max first.Length second.Length)
 
-    /// isCommon says which words are too common in the lists at hand to raise alone.
-    let internal comparePrepared (isCommon: string -> bool) (ours: Prepared) (theirs: Prepared) =
+    /// One reading of each name against the other. isCommon says which words are too common in the lists at hand to raise alone.
+    let private compareReading (isCommon: string -> bool) (ours: Prepared) (theirs: Prepared) =
         if ours.Words.IsEmpty || theirs.Words.IsEmpty then
             ValueNone
         elif ours.Sorted = theirs.Sorted then
@@ -527,30 +581,49 @@ module internal NameMatching =
                     && raisedAlone isCommon single
                     ->
                     ValueSome(0.85, "The one word of the screened name is in the listed name")
-                | _, [ single ] when
-                    theirs.Words = [ single ]
-                    && ours.WordSet.Contains single
-                    && raisedAlone isCommon single
-                    ->
-                    ValueSome(0.85, "The one word of the listed name is in the screened name")
                 | first, second ->
                     let oursText, theirsText = String.concat " " first, String.concat " " second
 
-                    if tooDifferentInLength oursText theirsText then
-                        ValueNone
-                    else
-                        let score = similarity oursText theirsText
-
-                        if score >= SpellingThreshold then
-                            ValueSome(
-                                Math.Round(score, 3),
-                                $"Similar spelling: Jaro-Winkler {score:F3} on sorted words"
-                            )
-                        else
+                    let similar =
+                        if tooDifferentInLength oursText theirsText then
                             ValueNone
+                        else
+                            let score = similarity oursText theirsText
+
+                            if score >= SpellingThreshold then
+                                ValueSome(
+                                    Math.Round(score, 3),
+                                    $"Similar spelling: Jaro-Winkler {score:F3} on sorted words"
+                                )
+                            else
+                                ValueNone
+
+                    // A listed name of one word counts by being in the screened name where the spelling of the whole names doesn't.
+                    match similar, theirs.Words with
+                    | ValueNone, [ single ] when ours.WordSet.Contains single && raisedAlone isCommon single ->
+                        ValueSome(0.85, "The one word of the listed name is in the screened name")
+                    | found, _ -> found
+
+    /// The better of the two readings: each name without its legal forms, and each with a form that is also a name kept.
+    let internal comparePrepared (isCommon: string -> bool) (ours: Prepared) (theirs: Prepared) =
+        let plain = compareReading isCommon ours theirs
+
+        match ours.Named, theirs.Named with
+        | ValueNone, ValueNone -> plain
+        | oursNamed, theirsNamed ->
+            let named =
+                compareReading
+                    isCommon
+                    (ValueOption.defaultValue ours oursNamed)
+                    (ValueOption.defaultValue theirs theirsNamed)
+
+            match plain, named with
+            | ValueSome(score, _), ValueSome(other, _) when other > score -> named
+            | ValueNone, _ -> named
+            | _ -> plain
 
     /// Whether two names resemble each other, with the score and the reason. A name of one word, screened or listed, counts when the other name
-    /// holds that word, and so do two names whose one distinctive word is the same or nearly the same. A screening also holds back a word common
-    /// in its lists: see CommonWordEntries.
+    /// holds that word, and so do two names whose one distinctive word is the same or nearly the same. A legal form that is also a name (AO,
+    /// NAO) is read both as a form and as a word. A screening also holds back a word common in its lists: see CommonWordEntries.
     let compare (screened: string) (listed: string) =
         comparePrepared (fun _ -> false) (prepare screened) (prepare listed)

@@ -368,11 +368,23 @@ module NameMatch =
     let normalise (name: string) = NameMatching.normalise name
 
     /// A test of published names against the name asked, after NameMatch.normalise on both: equal for Exact, starting with it for StartsWith,
-    /// holding it for Contains. A name asked with no letter or digit matches nothing.
+    /// holding it for Contains. A part of a Greek name, asked in Greek, also matches letter by letter, as the pairs of its Latin spelling
+    /// depend on the letters around them. A name asked with no letter or digit matches nothing.
     let matcher (matching: NameMatch) (asked: string) : string -> bool =
         match NameMatching.normalise asked with
         | "" -> fun _ -> false
         | normal ->
+            // The part asked, letter by letter, against a published name spelled the same way.
+            let greekPart (test: string -> string -> bool) : string -> bool =
+                if NameMatching.holdsGreek asked then
+                    let letters = NameMatching.normaliseByLetter asked
+
+                    fun published ->
+                        NameMatching.holdsGreek published
+                        && test (NameMatching.normaliseByLetter published) letters
+                else
+                    fun _ -> false
+
             // An ASCII name, as most are, is compared as it is read: a bulk search tests every name in a file.
             let ascii (published: string) =
                 not (isNull published) && Text.Ascii.IsValid published
@@ -385,13 +397,22 @@ module NameMatch =
                     else
                         NameMatching.normalise published = normal
             | NameMatch.StartsWith ->
+                let part =
+                    greekPart (fun published letters -> published.StartsWith(letters, StringComparison.Ordinal))
+
                 fun published ->
                     if ascii published then
                         NameMatching.asciiNormalMatches false normal published
                     else
                         (NameMatching.normalise published).StartsWith(normal, StringComparison.Ordinal)
+                        || part published
             | NameMatch.Contains ->
-                fun published -> (NameMatching.normalise published).Contains(normal, StringComparison.Ordinal)
+                let part =
+                    greekPart (fun published letters -> published.Contains(letters, StringComparison.Ordinal))
+
+                fun published ->
+                    (NameMatching.normalise published).Contains(normal, StringComparison.Ordinal)
+                    || part published
 
     /// The matches of a register's own search that match asked. The result is never Complete, and TotalMatches, which counts the register's own
     /// search, is dropped.
